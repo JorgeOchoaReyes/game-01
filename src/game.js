@@ -227,8 +227,14 @@ var game = {
   shadesBurned: 0,
   shake: 0,
   lowFuelWarn: 0,
-  flash: 0                  // screen flash on flare
+  flash: 0,                 // screen flash on flare
+  banner: null,             // {main, sub, t, max} transient center message
+  tipShown: false           // first-dawn onboarding nudge
 };
+
+function setBanner(main, sub, dur) {
+  game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 };
+}
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: 0, chill: 0 };
 var trees = [];    // wood nodes
@@ -294,7 +300,9 @@ function startGame() {
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
+  game.banner = null; game.tipShown = false;
   for (var i = 0; i < 6; i++) spawnTree();
+  setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null);
   UI.syncDock();
 }
@@ -350,6 +358,7 @@ function update(dt) {
       game.phase = 'night';
       game.phaseTime = CFG.nightLen;
       game.nightSpawnAcc = 0;
+      setBanner('NIGHT ' + game.night, 'The dark comes — keep it burning', 2.4);
       Audio2.night();
     }
   } else { // night
@@ -367,6 +376,7 @@ function update(dt) {
       game.phaseTime = CFG.dawnLen;
       shades.length = 0; // dawn scatters the dark
       addParticles(CFG.fireX, CFG.fireY, 30, '#ffd24a', 160, 0.9, 4);
+      setBanner('DAWN', 'Night ' + (game.night - 1) + ' survived — stock up', 2.8);
       Audio2.dawn();
     }
   }
@@ -501,6 +511,11 @@ function update(dt) {
   }
 
   updateParticles(dt);
+  // keep dock button states (enabled/attention) in sync with continuously
+  // changing fuel/bank, without churning the DOM every frame
+  game._uiAcc = (game._uiAcc || 0) + dt;
+  if (game._uiAcc > 0.25) { game._uiAcc = 0; UI.syncDock(); }
+  if (game.banner) { game.banner.t -= dt; if (game.banner.t <= 0) game.banner = null; }
   if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 22);
   if (game.flash > 0) game.flash = Math.max(0, game.flash - dt * 1.6);
 }
@@ -586,7 +601,7 @@ function render() {
   if (input.active && game.state === 'play') drawJoystick();
 
   // HUD (top)
-  if (game.state === 'play') drawHUD();
+  if (game.state === 'play') { drawHUD(); drawBanner(); drawLowFuelText(); }
 
   // flash overlay
   if (game.flash > 0) {
@@ -815,6 +830,44 @@ function meter(x, y, w, h, t, c1, c2, label, val) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// Big transient center banner announcing phase changes (makes the session read
+// as a sequence of rounds with clear starts/ends).
+function drawBanner() {
+  if (!game.banner) return;
+  var b = game.banner;
+  var k = b.t / b.max;                 // 1 -> 0
+  var a = clamp(k < 0.25 ? k / 0.25 : (k > 0.85 ? (1 - k) / 0.15 : 1), 0, 1);
+  var y = 250;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = game.phase === 'night' ? '#ff9d6a' : '#ffe08a';
+  ctx.font = '800 40px "Trebuchet MS", sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 12;
+  ctx.fillText(b.main, VW / 2, y);
+  if (b.sub) {
+    ctx.fillStyle = '#f3e9df';
+    ctx.font = '600 17px "Trebuchet MS", sans-serif';
+    ctx.fillText(b.sub, VW / 2, y + 30);
+  }
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+// Urgent warning when the fire is about to die.
+function drawLowFuelText() {
+  if (game.fuel >= 22) return;
+  var pulse = 0.5 + 0.5 * Math.sin(game.time * 9);
+  ctx.save();
+  ctx.globalAlpha = 0.55 + pulse * 0.45;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff5a6a';
+  ctx.font = '800 22px "Trebuchet MS", sans-serif';
+  ctx.fillText('⚠ THE FIRE IS DYING — FEED IT', VW / 2, CFG.playBottom + 34);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 function roundRect(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -927,6 +980,7 @@ var UI = (function () {
     // feed
     var canFeed = game.bank >= CFG.feedCost;
     feedBtn.classList.toggle('disabled', !canFeed);
+    feedBtn.classList.toggle('attn', canFeed && game.fuel < 32);
     feedBtn.querySelector('.cost').textContent = CFG.feedCost + ' wood → +' + CFG.feedGain + ' fire';
     // upgrades
     Object.keys(UPGRADES).forEach(function (key) {
