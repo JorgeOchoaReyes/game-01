@@ -1,0 +1,159 @@
+/* ===== Ember — layout & UI ===== */
+/* All UI is either drawn on the canvas (the game world + top HUD) or is a DOM
+   overlay created at runtime (bottom controls + full-screen menus). The whole
+   thing is locked to a tall, phone-shaped stage that never rotates. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --ember: #ff8a2b;
+  --ember-hot: #ffd24a;
+  --ash: #b7a99b;
+  --cold: #5fd0ff;
+  --panel: rgba(18, 12, 20, 0.86);
+  --panel-edge: rgba(255, 160, 70, 0.28);
+  --danger: #ff5a6a;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #050308;
+  overflow: hidden;
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #f3e9df;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* Portrait stage: a 9:16 box that fits the viewport in either dimension and is
+   centered. The canvas fills it; DOM overlays are positioned inside it. */
+#stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100vw, 56.25vh);   /* 9/16 of height */
+  height: min(177.78vw, 100vh); /* 16/9 of width  */
+  background: #0a0710;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---- runtime DOM overlays (created in game.js) ---- */
+
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* children opt back in */
+}
+
+/* Bottom control bar: thumb-reach buttons */
+.dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.dock-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.btn {
+  pointer-events: auto;
+  flex: 1 1 0;
+  min-height: 54px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  background: var(--panel);
+  color: #f3e9df;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.1;
+  transition: transform 0.06s ease, background 0.1s ease, opacity 0.1s ease;
+}
+.btn:active { transform: scale(0.94); }
+.btn .cost { font-size: 11px; font-weight: 600; color: var(--ash); }
+.btn .lvl  { font-size: 10px; font-weight: 600; color: var(--ember-hot); }
+
+.btn.feed {
+  background: linear-gradient(180deg, rgba(255,138,43,0.32), rgba(120,40,10,0.55));
+  border-color: rgba(255,180,90,0.55);
+  color: #fff2df;
+  font-size: 15px;
+  min-height: 58px;
+}
+.btn.disabled { opacity: 0.4; }
+.btn.flash { background: rgba(255, 210, 74, 0.55); }
+
+/* Full-screen menu overlays (title / game over / win) */
+.screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  gap: 14px;
+  background: radial-gradient(circle at 50% 42%, rgba(40,18,8,0.55), rgba(5,3,8,0.94) 72%);
+  backdrop-filter: blur(2px);
+}
+.screen h1 {
+  font-size: 46px;
+  letter-spacing: 4px;
+  color: var(--ember);
+  text-shadow: 0 0 24px rgba(255,138,43,0.7);
+}
+.screen h2 { font-size: 26px; color: #fff2df; }
+.screen p { font-size: 15px; max-width: 300px; line-height: 1.5; color: #d9cdbf; }
+.screen .stat { font-size: 15px; color: var(--ember-hot); }
+.screen .big {
+  pointer-events: auto;
+  margin-top: 8px;
+  padding: 15px 40px;
+  border-radius: 40px;
+  border: 1px solid rgba(255,180,90,0.6);
+  background: linear-gradient(180deg, rgba(255,138,43,0.9), rgba(190,70,20,0.95));
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 0 34px rgba(255,138,43,0.5);
+}
+.screen .big:active { transform: scale(0.96); }
+.screen .hint { font-size: 12.5px; color: var(--ash); max-width: 280px; }
+.screen.hidden { display: none; }
+
+.legend { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.legend .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #d9cdbf; }
+.legend .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+
+.credit { position: absolute; bottom: 12px; font-size: 11px; color: #6b5f55; }

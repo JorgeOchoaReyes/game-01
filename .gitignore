@@ -1,0 +1,4 @@
+node_modules/
+scripts/shots/
+*.zip
+package-lock.json

@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0710" />
+<title>Ember — a survival prototype</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%A5%3C/text%3E%3C/svg%3E" />
+<style>
+/* ===== Ember — layout & UI ===== */
+/* All UI is either drawn on the canvas (the game world + top HUD) or is a DOM
+   overlay created at runtime (bottom controls + full-screen menus). The whole
+   thing is locked to a tall, phone-shaped stage that never rotates. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --ember: #ff8a2b;
+  --ember-hot: #ffd24a;
+  --ash: #b7a99b;
+  --cold: #5fd0ff;
+  --panel: rgba(18, 12, 20, 0.86);
+  --panel-edge: rgba(255, 160, 70, 0.28);
+  --danger: #ff5a6a;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #050308;
+  overflow: hidden;
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #f3e9df;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* Portrait stage: a 9:16 box that fits the viewport in either dimension and is
+   centered. The canvas fills it; DOM overlays are positioned inside it. */
+#stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100vw, 56.25vh);   /* 9/16 of height */
+  height: min(177.78vw, 100vh); /* 16/9 of width  */
+  background: #0a0710;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---- runtime DOM overlays (created in game.js) ---- */
+
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* children opt back in */
+}
+
+/* Bottom control bar: thumb-reach buttons */
+.dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.dock-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.btn {
+  pointer-events: auto;
+  flex: 1 1 0;
+  min-height: 54px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  background: var(--panel);
+  color: #f3e9df;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.1;
+  transition: transform 0.06s ease, background 0.1s ease, opacity 0.1s ease;
+}
+.btn:active { transform: scale(0.94); }
+.btn .cost { font-size: 11px; font-weight: 600; color: var(--ash); }
+.btn .lvl  { font-size: 10px; font-weight: 600; color: var(--ember-hot); }
+
+.btn.feed {
+  background: linear-gradient(180deg, rgba(255,138,43,0.32), rgba(120,40,10,0.55));
+  border-color: rgba(255,180,90,0.55);
+  color: #fff2df;
+  font-size: 15px;
+  min-height: 58px;
+}
+.btn.disabled { opacity: 0.4; }
+.btn.flash { background: rgba(255, 210, 74, 0.55); }
+
+/* Full-screen menu overlays (title / game over / win) */
+.screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  gap: 14px;
+  background: radial-gradient(circle at 50% 42%, rgba(40,18,8,0.55), rgba(5,3,8,0.94) 72%);
+  backdrop-filter: blur(2px);
+}
+.screen h1 {
+  font-size: 46px;
+  letter-spacing: 4px;
+  color: var(--ember);
+  text-shadow: 0 0 24px rgba(255,138,43,0.7);
+}
+.screen h2 { font-size: 26px; color: #fff2df; }
+.screen p { font-size: 15px; max-width: 300px; line-height: 1.5; color: #d9cdbf; }
+.screen .stat { font-size: 15px; color: var(--ember-hot); }
+.screen .big {
+  pointer-events: auto;
+  margin-top: 8px;
+  padding: 15px 40px;
+  border-radius: 40px;
+  border: 1px solid rgba(255,180,90,0.6);
+  background: linear-gradient(180deg, rgba(255,138,43,0.9), rgba(190,70,20,0.95));
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 0 34px rgba(255,138,43,0.5);
+}
+.screen .big:active { transform: scale(0.96); }
+.screen .hint { font-size: 12.5px; color: var(--ash); max-width: 280px; }
+.screen.hidden { display: none; }
+
+.legend { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.legend .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #d9cdbf; }
+.legend .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+
+.credit { position: absolute; bottom: 12px; font-size: 11px; color: #6b5f55; }
+
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+</div>
+<script>
+"use strict";
+(function () {
+/* ===== src/game.js ===== */
+/*
+ * EMBER — a single-player, portrait survival prototype.
+ *
+ * Core fantasy: your campfire is the only light, the only warmth, your currency,
+ * and your weapon. Everything is the fire.
+ *
+ * Core loop:
+ *   GATHER  — leave the safe light to chop wood in the dark (you get cold out there)
+ *   BANK    — carry wood back to the fire
+ *   DECIDE  — FEED the fire (fuel = light radius + burn power + survival) OR
+ *             spend wood on permanent UPGRADES
+ *   SURVIVE — shades crawl from the dark each night to drain the fire; a hot fire
+ *             burns them, a feeble one gets eaten. Nights escalate.
+ *
+ * Win : survive to the end of Night 5 (dawn).
+ * Lose: the fire dies (fuel 0) or you freeze (warmth 0).
+ *
+ * The whole world is one fixed portrait screen (no scrolling, no rotation).
+ * Everything is drawn procedurally and all sound is synthesized — no external assets.
+ */
+
+// ---------------------------------------------------------------------------
+// 1. Virtual resolution + canvas scaling
+// ---------------------------------------------------------------------------
+// All game logic runs in a fixed 540x960 "virtual" space. The canvas backing
+// store is sized to the real stage in device pixels; we scale the context so
+// drawing in virtual units always fills the stage. DOM overlays use % so they
+// line up with the same box.
+var VW = 540, VH = 960;
+
+var stage = document.getElementById('stage');
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+var scaleX = 1, scaleY = 1;
+
+function resize() {
+  var rect = stage.getBoundingClientRect();
+  var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  scaleX = canvas.width / VW;
+  scaleY = canvas.height / VH;
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+resize();
+
+// Convert a browser pointer event to virtual coordinates.
+function toVirtual(clientX, clientY) {
+  var rect = stage.getBoundingClientRect();
+  return {
+    x: ((clientX - rect.left) / rect.width) * VW,
+    y: ((clientY - rect.top) / rect.height) * VH
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2. Small helpers
+// ---------------------------------------------------------------------------
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rand(a, b) { return a + Math.random() * (b - a); }
+function dist2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+function TAU() { return Math.PI * 2; }
+
+// ---------------------------------------------------------------------------
+// 3. Audio — tiny synthesized SFX (no files, works fully offline)
+// ---------------------------------------------------------------------------
+var Audio2 = (function () {
+  var ac = null, master = null, enabled = true;
+  function ensure() {
+    if (ac) return;
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain();
+      master.gain.value = 0.6;
+      master.connect(ac.destination);
+    } catch (e) { enabled = false; }
+  }
+  function resume() { ensure(); if (ac && ac.state === 'suspended') ac.resume(); }
+  function tone(freq, dur, type, vol, slideTo) {
+    if (!enabled) return; ensure(); if (!ac) return;
+    var t = ac.currentTime;
+    var o = ac.createOscillator();
+    var g = ac.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(dur, vol, filterFreq) {
+    if (!enabled) return; ensure(); if (!ac) return;
+    var t = ac.currentTime;
+    var n = Math.floor(ac.sampleRate * dur);
+    var buf = ac.createBuffer(1, n, ac.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    var src = ac.createBufferSource(); src.buffer = buf;
+    var f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filterFreq || 1200;
+    var g = ac.createGain(); g.gain.value = vol || 0.3;
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t);
+  }
+  return {
+    resume: resume,
+    chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
+    feed: function () { tone(180, 0.25, 'sawtooth', 0.18, 420); noise(0.35, 0.28, 900); },
+    flare: function () { tone(120, 0.4, 'sawtooth', 0.22, 600); noise(0.4, 0.35, 1400); },
+    upgrade: function () { tone(520, 0.12, 'triangle', 0.2); setTimeout(function () { tone(780, 0.18, 'triangle', 0.2); }, 90); },
+    hurt: function () { tone(160, 0.2, 'square', 0.2, 60); },
+    shadeDie: function () { noise(0.18, 0.22, 700); tone(90, 0.18, 'sine', 0.12, 40); },
+    bite: function () { tone(70, 0.18, 'square', 0.18, 40); noise(0.12, 0.15, 500); },
+    night: function () { tone(70, 0.9, 'sine', 0.16, 55); },
+    dawn: function () { tone(330, 0.3, 'triangle', 0.16); setTimeout(function () { tone(494, 0.4, 'triangle', 0.16); }, 150); },
+    lose: function () { tone(200, 1.1, 'sawtooth', 0.22, 45); },
+    win: function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, 'triangle', 0.18); }, i * 140); }); }
+  };
+})();
+
+// ---------------------------------------------------------------------------
+// 4. Input — floating virtual joystick (touch/mouse) + keyboard fallback
+// ---------------------------------------------------------------------------
+var input = {
+  active: false, ox: 0, oy: 0, x: 0, y: 0, // joystick origin + current
+  dx: 0, dy: 0, mag: 0,                     // resulting direction
+  keys: {}
+};
+
+function pointerDown(e) {
+  Audio2.resume();
+  if (game.state !== 'play') return;
+  var p = pointFromEvent(e);
+  input.active = true;
+  input.ox = input.x = p.x; input.oy = input.y = p.y;
+  input.dx = input.dy = input.mag = 0;
+}
+function pointerMove(e) {
+  if (!input.active) return;
+  var p = pointFromEvent(e);
+  input.x = p.x; input.y = p.y;
+  var dx = input.x - input.ox, dy = input.y - input.oy;
+  var d = Math.hypot(dx, dy);
+  var maxR = 70;
+  if (d > maxR) { // re-anchor so the stick follows the thumb
+    input.ox = input.x - dx / d * maxR;
+    input.oy = input.y - dy / d * maxR;
+    dx = input.x - input.ox; dy = input.y - input.oy; d = maxR;
+  }
+  input.mag = clamp(d / maxR, 0, 1);
+  if (d > 0.001) { input.dx = dx / d; input.dy = dy / d; }
+}
+function pointerUp() { input.active = false; input.dx = input.dy = input.mag = 0; }
+
+function pointFromEvent(e) {
+  var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+  return toVirtual(t.clientX, t.clientY);
+}
+
+canvas.addEventListener('mousedown', pointerDown);
+window.addEventListener('mousemove', pointerMove);
+window.addEventListener('mouseup', pointerUp);
+canvas.addEventListener('touchstart', function (e) { e.preventDefault(); pointerDown(e); }, { passive: false });
+canvas.addEventListener('touchmove', function (e) { e.preventDefault(); pointerMove(e); }, { passive: false });
+canvas.addEventListener('touchend', function (e) { e.preventDefault(); pointerUp(e); }, { passive: false });
+
+window.addEventListener('keydown', function (e) {
+  input.keys[e.key.toLowerCase()] = true;
+  if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
+});
+window.addEventListener('keyup', function (e) { input.keys[e.key.toLowerCase()] = false; });
+
+function keyboardDir() {
+  var k = input.keys, x = 0, y = 0;
+  if (k['a'] || k['arrowleft']) x -= 1;
+  if (k['d'] || k['arrowright']) x += 1;
+  if (k['w'] || k['arrowup']) y -= 1;
+  if (k['s'] || k['arrowdown']) y += 1;
+  var d = Math.hypot(x, y);
+  if (d > 0) return { dx: x / d, dy: y / d, mag: 1 };
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 5. Config
+// ---------------------------------------------------------------------------
+var CFG = {
+  fireX: VW / 2, fireY: VH * 0.60,
+  playTop: 132, playBottom: VH - 150,   // playable band (HUD top, dock bottom)
+  fuelMax: 100,
+  warmthMax: 100,
+  survivorSpeed: 210,
+  carryBase: 6,
+  gatherTime: 0.9,                       // seconds of contact to pop one wood
+  feedCost: 5, feedGain: 14,             // wood -> fuel
+  nights: 5,
+  nightLen: 30,                          // seconds of "night" (enemies)
+  dawnLen: 9                             // seconds of calm between nights
+};
+
+// Upgrades: spend banked wood. Each reinforces the single-resource economy.
+var UPGRADES = {
+  stoke:    { name: 'Stoke',   desc: 'radius',  lvl: 0, max: 5, base: 12, step: 8 },
+  ashheart: { name: 'Ashheart', desc: 'burn',   lvl: 0, max: 5, base: 14, step: 9 },
+  satchel:  { name: 'Satchel', desc: 'carry',   lvl: 0, max: 5, base: 10, step: 7 },
+  coat:     { name: 'Coat',    desc: 'warmth',  lvl: 0, max: 5, base: 10, step: 7 }
+};
+function upgradeCost(u) { return u.base + u.step * u.lvl; }
+
+// ---------------------------------------------------------------------------
+// 6. Game state + entities
+// ---------------------------------------------------------------------------
+var game = {
+  state: 'title',           // title | play | over | win
+  time: 0,
+  fuel: 55,
+  warmth: 100,
+  bank: 0,                  // wood stockpiled at the fire
+  carry: 0,                 // wood on the survivor
+  night: 1,
+  phase: 'dawn',            // dawn (calm) | night (waves)
+  phaseTime: CFG.dawnLen,
+  woodPopped: 0,            // score-y stat
+  shadesBurned: 0,
+  shake: 0,
+  lowFuelWarn: 0,
+  flash: 0                  // screen flash on flare
+};
+
+var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: 0, chill: 0 };
+var trees = [];    // wood nodes
+var shades = [];   // enemies
+var particles = [];
+var flares = [];   // expanding damage rings
+
+function fireRadius() {
+  var stoke = UPGRADES.stoke.lvl;
+  return 78 + (game.fuel / CFG.fuelMax) * 120 + stoke * 14;
+}
+function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
+function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3; }
+function burnDps() { return 26 + UPGRADES.ashheart.lvl * 12; }
+
+// spawn a wood node somewhere in the dark ring around the fire
+function spawnTree() {
+  for (var tries = 0; tries < 30; tries++) {
+    var a = rand(0, TAU());
+    var d = rand(150, 260);
+    var x = CFG.fireX + Math.cos(a) * d;
+    var y = CFG.fireY + Math.sin(a) * d * 0.9;
+    if (x < 30 || x > VW - 30 || y < CFG.playTop + 20 || y > CFG.playBottom - 10) continue;
+    trees.push({ x: x, y: y, r: 15, wood: 5, chop: 0, sway: rand(0, TAU()) });
+    return;
+  }
+}
+
+function spawnShade(hpMul, spdMul) {
+  var edge = Math.floor(rand(0, 4));
+  var x, y;
+  if (edge === 0) { x = rand(20, VW - 20); y = CFG.playTop + 4; }
+  else if (edge === 1) { x = rand(20, VW - 20); y = CFG.playBottom - 4; }
+  else if (edge === 2) { x = 12; y = rand(CFG.playTop, CFG.playBottom); }
+  else { x = VW - 12; y = rand(CFG.playTop, CFG.playBottom); }
+  var hp = 3 * hpMul;
+  shades.push({
+    x: x, y: y, r: 12, hp: hp, maxHp: hp,
+    spd: rand(26, 40) * spdMul, biteCd: 0, wob: rand(0, TAU()),
+    hitFlash: 0
+  });
+}
+
+function addParticles(x, y, n, color, spd, life, sz) {
+  for (var i = 0; i < n; i++) {
+    var a = rand(0, TAU());
+    particles.push({
+      x: x, y: y, vx: Math.cos(a) * rand(0, spd), vy: Math.sin(a) * rand(0, spd) - rand(0, spd * 0.4),
+      life: life * rand(0.6, 1), maxLife: life, color: color, sz: sz || rand(2, 4)
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Session control
+// ---------------------------------------------------------------------------
+function startGame() {
+  game.state = 'play';
+  game.time = 0;
+  game.fuel = 55; game.warmth = 100; game.bank = 0; game.carry = 0;
+  game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
+  game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
+  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0;
+  for (var k in UPGRADES) UPGRADES[k].lvl = 0;
+  for (var i = 0; i < 6; i++) spawnTree();
+  UI.showScreen(null);
+  UI.syncDock();
+}
+
+function endGame(win) {
+  game.state = win ? 'win' : 'over';
+  if (win) Audio2.win(); else Audio2.lose();
+  UI.showResult(win);
+}
+
+function feedFire() {
+  if (game.state !== 'play' || game.bank < CFG.feedCost) return;
+  game.bank -= CFG.feedCost;
+  game.fuel = clamp(game.fuel + CFG.feedGain, 0, CFG.fuelMax + 40); // can bank a little over max
+  triggerFlare(fireRadius() * 0.9, 14);
+  game.flash = Math.max(game.flash, 0.35);
+  game.shake = Math.max(game.shake, 4);
+  Audio2.feed();
+  UI.syncDock();
+  UI.flashBtn('feed');
+}
+
+function triggerFlare(radius, dmg) {
+  flares.push({ x: CFG.fireX, y: CFG.fireY, r: 20, max: radius, dmg: dmg, life: 0.45, maxLife: 0.45 });
+  addParticles(CFG.fireX, CFG.fireY, 22, '#ffce54', 220, 0.5, 4);
+}
+
+function buyUpgrade(key) {
+  if (game.state !== 'play') return;
+  var u = UPGRADES[key];
+  if (u.lvl >= u.max) return;
+  var cost = upgradeCost(u);
+  if (game.bank < cost) return;
+  game.bank -= cost;
+  u.lvl++;
+  Audio2.upgrade();
+  addParticles(survivor.x, survivor.y, 16, '#8affc1', 120, 0.6, 3);
+  UI.syncDock();
+  UI.flashBtn(key);
+}
+
+// ---------------------------------------------------------------------------
+// 8. Update
+// ---------------------------------------------------------------------------
+function update(dt) {
+  if (game.state !== 'play') { updateParticles(dt); return; }
+  game.time += dt;
+
+  // ---- phase / night escalation ----
+  game.phaseTime -= dt;
+  if (game.phase === 'dawn') {
+    if (game.phaseTime <= 0) {
+      game.phase = 'night';
+      game.phaseTime = CFG.nightLen;
+      game.nightSpawnAcc = 0;
+      Audio2.night();
+    }
+  } else { // night
+    // spawn shades across the night, escalating with night number
+    var hpMul = 1 + (game.night - 1) * 0.45;
+    var spdMul = 1 + (game.night - 1) * 0.12;
+    var ratePerSec = 0.6 + game.night * 0.35;             // shades/sec
+    game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
+    while (game.nightSpawnAcc >= 1) { spawnShade(hpMul, spdMul); game.nightSpawnAcc -= 1; }
+    if (game.phaseTime <= 0) {
+      // survived the night
+      if (game.night >= CFG.nights) { endGame(true); return; }
+      game.night++;
+      game.phase = 'dawn';
+      game.phaseTime = CFG.dawnLen;
+      shades.length = 0; // dawn scatters the dark
+      addParticles(CFG.fireX, CFG.fireY, 30, '#ffd24a', 160, 0.9, 4);
+      Audio2.dawn();
+    }
+  }
+
+  // ---- fuel decay (faster at night, faster on higher nights) ----
+  var decay = 1.5 + game.night * 0.35 + (game.phase === 'night' ? 1.4 : 0);
+  game.fuel -= decay * dt;
+  if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
+
+  // low-fuel pulse
+  game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
+
+  // ---- survivor movement ----
+  var dir = keyboardDir();
+  var mvx = 0, mvy = 0, mag = 0;
+  if (dir) { mvx = dir.dx; mvy = dir.dy; mag = dir.mag; }
+  else if (input.active) { mvx = input.dx; mvy = input.dy; mag = input.mag; }
+  if (mag > 0.05) {
+    survivor.x += mvx * CFG.survivorSpeed * mag * dt;
+    survivor.y += mvy * CFG.survivorSpeed * mag * dt;
+    survivor.face = Math.atan2(mvy, mvx);
+  }
+  survivor.x = clamp(survivor.x, 18, VW - 18);
+  survivor.y = clamp(survivor.y, CFG.playTop + 10, CFG.playBottom - 6);
+
+  // ---- warmth: lit = warm, dark = cold ----
+  var litByFire = dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(fireRadius(), 2);
+  var warmthRate;
+  if (litByFire) warmthRate = 22;
+  else {
+    var coldBase = 9 + game.night * 1.2 + (game.phase === 'night' ? 4 : 0);
+    warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12);
+  }
+  game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
+  survivor.chill = 1 - game.warmth / CFG.warmthMax;
+  if (game.warmth <= 0) { endGame(false); return; }
+
+  // ---- gathering ----
+  var near = null, nearD = 1e9;
+  for (var i = 0; i < trees.length; i++) {
+    var t = trees[i];
+    var d = dist2(survivor.x, survivor.y, t.x, t.y);
+    if (d < Math.pow(t.r + survivor.r + 6, 2) && d < nearD) { near = t; nearD = d; }
+  }
+  if (near && game.carry < carryCap()) {
+    near.chop += dt;
+    if (near.chop >= CFG.gatherTime) {
+      near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
+      addParticles(near.x, near.y, 7, '#c98a4a', 90, 0.5, 3);
+      Audio2.chop();
+      if (near.wood <= 0) {
+        trees.splice(trees.indexOf(near), 1);
+        setTimeout(spawnTree, 1200); // regrow elsewhere after a beat
+      }
+      UI.syncDock();
+    }
+  }
+
+  // ---- banking: standing on the fire deposits carried wood ----
+  if (litByFire && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(fireRadius() * 0.5, 2)) {
+    if (game.carry > 0) {
+      game.bank += game.carry; game.carry = 0;
+      addParticles(CFG.fireX, CFG.fireY, 6, '#ffd24a', 70, 0.4, 3);
+      UI.syncDock();
+    }
+  }
+
+  // keep some trees alive
+  if (trees.length < 5 && Math.random() < dt * 0.8) spawnTree();
+
+  // ---- shades ----
+  var R = fireRadius(); var R2 = R * R; var dps = burnDps();
+  for (var j = shades.length - 1; j >= 0; j--) {
+    var s = shades[j];
+    s.wob += dt * 4;
+    var toFx = CFG.fireX - s.x, toFy = CFG.fireY - s.y;
+    var fd = Math.hypot(toFx, toFy) || 1;
+    // drift toward fire with a little wobble
+    s.x += (toFx / fd) * s.spd * dt + Math.cos(s.wob) * 8 * dt;
+    s.y += (toFy / fd) * s.spd * dt + Math.sin(s.wob) * 8 * dt;
+    if (s.hitFlash > 0) s.hitFlash -= dt;
+
+    // fire burns shades inside the light
+    if (fd < R) {
+      var burn = dps * (0.4 + fireIntensity() * 0.8) * (1 - fd / R + 0.25) * dt;
+      s.hp -= burn;
+      if (Math.random() < dt * 8) addParticles(s.x, s.y, 1, '#ff7b3a', 40, 0.3, 2);
+    }
+
+    // survivor contact chills you and knocks back
+    if (dist2(s.x, s.y, survivor.x, survivor.y) < Math.pow(s.r + survivor.r, 2)) {
+      game.warmth = clamp(game.warmth - 16 * dt * 3, 0, CFG.warmthMax);
+      survivor.x -= (toFx / fd) * 40 * dt; survivor.y -= (toFy / fd) * 40 * dt;
+    }
+
+    // reached the fire core: bite -> drain fuel
+    if (fd < 42) {
+      s.biteCd -= dt;
+      if (s.biteCd <= 0) {
+        s.biteCd = 0.6;
+        game.fuel = clamp(game.fuel - 4, 0, CFG.fuelMax + 40);
+        game.shake = Math.max(game.shake, 6);
+        addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3);
+        Audio2.bite();
+        UI.syncDock();
+      }
+    }
+
+    if (s.hp <= 0) {
+      shades.splice(j, 1);
+      game.shadesBurned++;
+      addParticles(s.x, s.y, 12, '#8f79ff', 110, 0.5, 3);
+      Audio2.shadeDie();
+    }
+  }
+
+  // ---- flares (expanding damage rings from feeding) ----
+  for (var f = flares.length - 1; f >= 0; f--) {
+    var fl = flares[f];
+    fl.life -= dt;
+    fl.r = lerp(fl.max, 20, fl.life / fl.maxLife);
+    for (var q = shades.length - 1; q >= 0; q--) {
+      var sh = shades[q];
+      var dd = Math.hypot(sh.x - fl.x, sh.y - fl.y);
+      if (Math.abs(dd - fl.r) < 26) {
+        sh.hp -= fl.dmg * dt * 6; sh.hitFlash = 0.15;
+        var kx = (sh.x - fl.x) / (dd || 1), ky = (sh.y - fl.y) / (dd || 1);
+        sh.x += kx * 60 * dt; sh.y += ky * 60 * dt;
+      }
+    }
+    if (fl.life <= 0) flares.splice(f, 1);
+  }
+
+  updateParticles(dt);
+  if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 22);
+  if (game.flash > 0) game.flash = Math.max(0, game.flash - dt * 1.6);
+}
+
+function updateParticles(dt) {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy += 60 * dt; // slight gravity
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Render
+// ---------------------------------------------------------------------------
+function render() {
+  ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+  // shake
+  var sx = 0, sy = 0;
+  if (game.shake > 0) { sx = rand(-1, 1) * game.shake; sy = rand(-1, 1) * game.shake; }
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // background: night gradient, subtly warmer during dawn
+  var dawnT = game.phase === 'dawn' && game.state === 'play' ? clamp(game.phaseTime / CFG.dawnLen, 0, 1) : 0;
+  var g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, game.phase === 'dawn' ? '#241326' : '#0c0714');
+  g.addColorStop(1, '#050308');
+  ctx.fillStyle = g;
+  ctx.fillRect(-20, -20, VW + 40, VH + 40);
+
+  drawGround();
+
+  var R = fireRadius();
+
+  // light pool on the ground
+  var lg = ctx.createRadialGradient(CFG.fireX, CFG.fireY, 10, CFG.fireX, CFG.fireY, R);
+  var intensity = fireIntensity();
+  lg.addColorStop(0, 'rgba(255,180,80,' + (0.55 * (0.5 + intensity * 0.5)) + ')');
+  lg.addColorStop(0.5, 'rgba(255,130,50,' + (0.20 * (0.5 + intensity * 0.5)) + ')');
+  lg.addColorStop(1, 'rgba(255,120,40,0)');
+  ctx.fillStyle = lg;
+  ctx.beginPath(); ctx.arc(CFG.fireX, CFG.fireY, R, 0, TAU()); ctx.fill();
+
+  // trees (wood nodes) — dim silhouettes in the dark, warm when lit
+  for (var i = 0; i < trees.length; i++) drawTree(trees[i], R);
+
+  // flares
+  for (var f = 0; f < flares.length; f++) {
+    var fl = flares[f];
+    ctx.globalAlpha = clamp(fl.life / fl.maxLife, 0, 1) * 0.7;
+    ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(fl.x, fl.y, fl.r, 0, TAU()); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // shades
+  for (var j = 0; j < shades.length; j++) drawShade(shades[j], R);
+
+  // the fire itself
+  drawFire(R, intensity);
+
+  // survivor
+  drawSurvivor();
+
+  // particles
+  for (var p = 0; p < particles.length; p++) {
+    var pt = particles[p];
+    ctx.globalAlpha = clamp(pt.life / pt.maxLife, 0, 1);
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(pt.x - pt.sz / 2, pt.y - pt.sz / 2, pt.sz, pt.sz);
+  }
+  ctx.globalAlpha = 1;
+
+  // darkness vignette (edges of world are pitch black) + cold tint
+  drawVignette();
+
+  ctx.restore();
+
+  // joystick
+  if (input.active && game.state === 'play') drawJoystick();
+
+  // HUD (top)
+  if (game.state === 'play') drawHUD();
+
+  // flash overlay
+  if (game.flash > 0) {
+    ctx.fillStyle = 'rgba(255,220,120,' + (game.flash * 0.5) + ')';
+    ctx.fillRect(0, 0, VW, VH);
+  }
+}
+
+function drawGround() {
+  // faint concentric rings so motion reads even in the dark
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.lineWidth = 1;
+  for (var r = 60; r < 320; r += 55) {
+    ctx.beginPath(); ctx.arc(CFG.fireX, CFG.fireY, r, 0, TAU()); ctx.stroke();
+  }
+}
+
+function litFactor(x, y, R) {
+  var d = Math.sqrt(dist2(x, y, CFG.fireX, CFG.fireY));
+  return clamp(1 - d / (R + 30), 0.12, 1);
+}
+
+function drawTree(t, R) {
+  var lf = litFactor(t.x, t.y, R);
+  ctx.save();
+  ctx.translate(t.x, t.y);
+  // trunk
+  ctx.fillStyle = 'rgba(120,80,45,' + (0.25 + lf * 0.75) + ')';
+  ctx.fillRect(-4, -2, 8, 16);
+  // canopy (a stumpy bush)
+  ctx.fillStyle = 'rgba(60,120,70,' + (0.22 + lf * 0.78) + ')';
+  ctx.beginPath(); ctx.arc(0, -6, t.r, 0, TAU()); ctx.fill();
+  ctx.fillStyle = 'rgba(90,160,95,' + (0.15 + lf * 0.7) + ')';
+  ctx.beginPath(); ctx.arc(-5, -10, t.r * 0.6, 0, TAU()); ctx.fill();
+  // chop progress ring
+  if (t.chop > 0) {
+    ctx.strokeStyle = '#ffce54'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, -6, t.r + 5, -Math.PI / 2, -Math.PI / 2 + TAU() * (t.chop / CFG.gatherTime)); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawShade(s, R) {
+  var lf = litFactor(s.x, s.y, R);
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  var bob = Math.sin(s.wob) * 2;
+  // body — a dark tattered blob; brightens (reveals) only when lit
+  ctx.fillStyle = s.hitFlash > 0 ? '#ffffff' : ('rgba(70,50,120,' + (0.35 + lf * 0.55) + ')');
+  ctx.beginPath();
+  ctx.moveTo(0, -s.r + bob);
+  for (var a = 0; a <= TAU() + 0.01; a += Math.PI / 6) {
+    var rr = s.r * (0.8 + 0.25 * Math.sin(a * 3 + s.wob));
+    ctx.lineTo(Math.cos(a - Math.PI / 2) * rr, Math.sin(a - Math.PI / 2) * rr + bob);
+  }
+  ctx.closePath(); ctx.fill();
+  // glowing eyes — always visible so threats read even in the dark
+  ctx.fillStyle = '#c9b6ff';
+  ctx.shadowColor = '#a98cff'; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(-4, -2 + bob, 2.4, 0, TAU()); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, -2 + bob, 2.4, 0, TAU()); ctx.fill();
+  ctx.shadowBlur = 0;
+  // hp pip
+  if (s.hp < s.maxHp) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-10, -s.r - 8, 20, 3);
+    ctx.fillStyle = '#ff5a6a'; ctx.fillRect(-10, -s.r - 8, 20 * clamp(s.hp / s.maxHp, 0, 1), 3);
+  }
+  ctx.restore();
+}
+
+function drawFire(R, intensity) {
+  var t = game.time;
+  ctx.save();
+  ctx.translate(CFG.fireX, CFG.fireY);
+  // logs
+  ctx.fillStyle = '#4a2e1c';
+  ctx.fillRect(-22, 8, 44, 8);
+  ctx.save(); ctx.rotate(0.5); ctx.fillStyle = '#3a2416'; ctx.fillRect(-20, 8, 40, 7); ctx.restore();
+  // flame — layered flickering triangles
+  var flick = 1 + Math.sin(t * 14) * 0.06 + Math.sin(t * 23) * 0.04;
+  var h = (34 + intensity * 46) * flick;
+  var w = 20 + intensity * 20;
+  function flame(scale, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * scale);
+    ctx.quadraticCurveTo(w * scale, -h * scale * 0.35, w * scale * 0.5, 6);
+    ctx.quadraticCurveTo(0, 12, -w * scale * 0.5, 6);
+    ctx.quadraticCurveTo(-w * scale, -h * scale * 0.35, 0, -h * scale);
+    ctx.fill();
+  }
+  ctx.shadowColor = 'rgba(255,140,50,0.9)'; ctx.shadowBlur = 30 + intensity * 30;
+  flame(1.0, '#ff6a1e');
+  ctx.shadowBlur = 0;
+  flame(0.7, '#ff9d3a');
+  flame(0.42, '#ffd24a');
+  flame(0.2, '#fff2c0');
+  // rising embers
+  if (Math.random() < 0.5) addParticles(0 + CFG.fireX, -10 + CFG.fireY, 1, '#ffb347', 20, 0.8, 2);
+  ctx.restore();
+
+  // low fuel warning ring
+  if (game.lowFuelWarn > 0) {
+    var pulse = 0.5 + 0.5 * Math.sin(game.time * 10);
+    ctx.strokeStyle = 'rgba(255,90,106,' + (0.3 + pulse * 0.5) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(CFG.fireX, CFG.fireY, 46, 0, TAU()); ctx.stroke();
+  }
+}
+
+function drawSurvivor() {
+  ctx.save();
+  ctx.translate(survivor.x, survivor.y);
+  // little personal glow (a held torch)
+  var tg = ctx.createRadialGradient(0, 0, 2, 0, 0, 46);
+  tg.addColorStop(0, 'rgba(255,200,120,0.4)');
+  tg.addColorStop(1, 'rgba(255,200,120,0)');
+  ctx.fillStyle = tg;
+  ctx.beginPath(); ctx.arc(0, 0, 46, 0, TAU()); ctx.fill();
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(0, 13, 11, 4, 0, 0, TAU()); ctx.fill();
+  // body — bright so it's always the most legible thing on screen
+  var chillTint = survivor.chill > 0.4 ? Math.floor((survivor.chill - 0.4) * 255) : 0;
+  ctx.fillStyle = 'rgb(255,' + (232 - chillTint * 0.3) + ',' + (200 + chillTint * 0.2) + ')';
+  ctx.beginPath(); ctx.arc(0, -6, 8, 0, TAU()); ctx.fill();       // head
+  ctx.fillStyle = '#e9d9b8';
+  ctx.beginPath();
+  ctx.moveTo(-9, 12); ctx.quadraticCurveTo(0, -8, 9, 12); ctx.closePath(); ctx.fill(); // cloak body
+  // facing pip (a little torch flame in front)
+  var fx = Math.cos(survivor.face) * 12, fy = Math.sin(survivor.face) * 12 - 2;
+  ctx.fillStyle = '#ffca57'; ctx.shadowColor = '#ffb347'; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(fx, fy, 3.5, 0, TAU()); ctx.fill();
+  ctx.shadowBlur = 0;
+  // carry indicator
+  if (game.carry > 0) {
+    ctx.fillStyle = '#c98a4a';
+    for (var i = 0; i < Math.min(game.carry, 6); i++) {
+      ctx.fillRect(-8 + i * 3, -18, 2.4, 6);
+    }
+  }
+  ctx.restore();
+}
+
+function drawVignette() {
+  var vg = ctx.createRadialGradient(CFG.fireX, CFG.fireY, 120, CFG.fireX, CFG.fireY, 520);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.82)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(-20, -20, VW + 40, VH + 40);
+  // cold blue tint creeping in as warmth drops
+  if (survivor.chill > 0.15) {
+    ctx.fillStyle = 'rgba(60,160,255,' + (survivor.chill * 0.22) + ')';
+    ctx.fillRect(0, 0, VW, VH);
+  }
+}
+
+function drawJoystick() {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = '#ffce8a'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(input.ox, input.oy, 70, 0, TAU()); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,206,138,0.5)';
+  ctx.beginPath(); ctx.arc(input.x, input.y, 26, 0, TAU()); ctx.fill();
+  ctx.restore();
+}
+
+// Top HUD: night + phase timer, fuel bar, warmth bar
+function drawHUD() {
+  // panel
+  ctx.fillStyle = 'rgba(12,8,16,0.7)';
+  ctx.fillRect(0, 0, VW, CFG.playTop - 8);
+
+  // Night + phase
+  ctx.fillStyle = '#f3e9df';
+  ctx.font = '700 22px "Trebuchet MS", sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText('NIGHT ' + game.night + ' / ' + CFG.nights, 16, 12);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = game.phase === 'night' ? '#ff9d6a' : '#8affc1';
+  ctx.font = '700 15px "Trebuchet MS", sans-serif';
+  var label = game.phase === 'night' ? 'DARK' : 'DAWN';
+  ctx.fillText(label + '  ' + Math.ceil(game.phaseTime) + 's', VW - 16, 15);
+
+  // phase progress bar
+  var barY = 40, barW = VW - 32;
+  var full = game.phase === 'night' ? CFG.nightLen : CFG.dawnLen;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(16, barY, barW, 5);
+  ctx.fillStyle = game.phase === 'night' ? '#ff6a4a' : '#6ad0a0';
+  ctx.fillRect(16, barY, barW * clamp(game.phaseTime / full, 0, 1), 5);
+
+  // FUEL bar
+  meter(16, 56, VW - 32, 20, game.fuel / CFG.fuelMax, '#ff8a2b', '#ffd24a', '🔥 FIRE', Math.round(game.fuel));
+  // WARMTH bar
+  meter(16, 81, VW - 32, 16, game.warmth / CFG.warmthMax, '#5fd0ff', '#bfeeff', '❄ WARMTH', Math.round(game.warmth));
+
+  // Wood bank + carry on their own row (no overlap with meters)
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '700 14px "Trebuchet MS", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#d9a066';
+  ctx.fillText('🪵 BANK ' + game.bank, 16, 118);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = game.carry >= carryCap() ? '#ffd24a' : '#b7a99b';
+  ctx.fillText('CARRYING ' + game.carry + ' / ' + carryCap(), VW - 16, 118);
+}
+
+function meter(x, y, w, h, t, c1, c2, label, val) {
+  t = clamp(t, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  roundRect(x, y, w, h, 5); ctx.fill();
+  var grad = ctx.createLinearGradient(x, 0, x + w, 0);
+  grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+  ctx.fillStyle = grad;
+  roundRect(x, y, w * t, h, 5); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+  roundRect(x, y, w, h, 5); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = '700 12px "Trebuchet MS", sans-serif';
+  ctx.fillText(label, x + 8, y + h / 2 + 1);
+  ctx.textAlign = 'right';
+  ctx.fillText(String(val), x + w - 8, y + h / 2 + 1);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// ---------------------------------------------------------------------------
+// 10. DOM UI — bottom dock + menu screens
+// ---------------------------------------------------------------------------
+var UI = (function () {
+  var layer = document.createElement('div');
+  layer.className = 'ui-layer';
+  stage.appendChild(layer);
+
+  // ---- dock (bottom controls) ----
+  var dock = document.createElement('div');
+  dock.className = 'dock';
+  layer.appendChild(dock);
+
+  var feedBtn = mkBtn('feed', '🔥 FEED FIRE', 'feed');
+  feedBtn.addEventListener('click', feedFire);
+  var feedRow = document.createElement('div'); feedRow.className = 'dock-row';
+  feedRow.appendChild(feedBtn);
+  dock.appendChild(feedRow);
+
+  var upRow = document.createElement('div'); upRow.className = 'dock-row';
+  var upBtns = {};
+  Object.keys(UPGRADES).forEach(function (key) {
+    var b = mkBtn(key, UPGRADES[key].name, '');
+    b.addEventListener('click', function () { buyUpgrade(key); });
+    upBtns[key] = b;
+    upRow.appendChild(b);
+  });
+  dock.appendChild(upRow);
+
+  function mkBtn(id, label, cls) {
+    var b = document.createElement('button');
+    b.className = 'btn ' + cls;
+    b.dataset.id = id;
+    b.innerHTML = '<span class="main">' + label + '</span><span class="cost"></span><span class="lvl"></span>';
+    return b;
+  }
+
+  // ---- screens ----
+  var screen = document.createElement('div');
+  screen.className = 'screen hidden';
+  layer.appendChild(screen);
+
+  function showScreen(node) {
+    if (!node) { screen.classList.add('hidden'); screen.innerHTML = ''; dockVisible(true); return; }
+    screen.classList.remove('hidden');
+    screen.innerHTML = '';
+    node.forEach(function (n) { screen.appendChild(n); });
+    dockVisible(false);
+  }
+  function dockVisible(v) { dock.style.display = v ? 'flex' : 'none'; }
+
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+  function showTitle() {
+    var h = el('h1', null, 'EMBER');
+    var p = el('p', null, 'Your fire is your light, your warmth, your wealth, and your only weapon. Feed it, and it burns the dark back. Neglect it, and the dark takes you.');
+    var legend = el('div', 'legend');
+    legend.appendChild(legendRow('#ffca57', 'You — carry a torch, chop wood'));
+    legend.appendChild(legendRow('#ff8a2b', 'The fire — keep it fed'));
+    legend.appendChild(legendRow('#6a9a55', 'Trees — walk into them to gather wood'));
+    legend.appendChild(legendRow('#8f79ff', 'Shades — drain the fire at night'));
+    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Bank wood at the fire, then FEED it or buy upgrades. Survive 5 nights.');
+    var btn = el('button', 'big', 'LIGHT THE FIRE');
+    btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
+    var credit = el('div', 'credit', 'A survival prototype · portrait · offline');
+    showScreen([h, p, legend, how, btn, credit]);
+  }
+
+  function legendRow(color, text) {
+    var r = el('div', 'row');
+    var d = el('span', 'dot'); d.style.background = color;
+    r.appendChild(d); r.appendChild(el('span', null, text));
+    return r;
+  }
+
+  function showResult(win) {
+    var h = el('h2', null, win ? '🌅 YOU SURVIVED' : '💀 THE FIRE DIED');
+    if (win) h.style.color = '#8affc1';
+    var reason;
+    if (win) reason = 'Dawn breaks on the fifth night. The dark could not take your fire.';
+    else reason = game.fuel <= 0 ? 'Your fire guttered out, and the dark rushed in.' : 'You wandered too far, too cold, and the night claimed you.';
+    var p = el('p', null, reason);
+    var s1 = el('div', 'stat', 'Nights survived: ' + (win ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0)) ) + ' / ' + CFG.nights);
+    var s2 = el('div', 'stat', 'Wood gathered: ' + game.woodPopped);
+    var s3 = el('div', 'stat', 'Shades burned: ' + game.shadesBurned);
+    var score = computeScore(win);
+    var s4 = el('div', 'stat', '★ Score: ' + score);
+    s4.style.fontSize = '20px';
+    var btn = el('button', 'big', 'PLAY AGAIN');
+    btn.addEventListener('click', function () { startGame(); });
+    showScreen([h, p, s1, s2, s3, s4, btn]);
+  }
+
+  function computeScore(win) {
+    var nights = win ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
+    return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (win ? 1000 : 0));
+  }
+
+  function syncDock() {
+    // feed
+    var canFeed = game.bank >= CFG.feedCost;
+    feedBtn.classList.toggle('disabled', !canFeed);
+    feedBtn.querySelector('.cost').textContent = CFG.feedCost + ' wood → +' + CFG.feedGain + ' fire';
+    // upgrades
+    Object.keys(UPGRADES).forEach(function (key) {
+      var u = UPGRADES[key], b = upBtns[key];
+      var maxed = u.lvl >= u.max;
+      var cost = upgradeCost(u);
+      b.classList.toggle('disabled', maxed || game.bank < cost);
+      b.querySelector('.cost').textContent = maxed ? 'MAX' : (cost + '🪵');
+      b.querySelector('.lvl').textContent = 'Lv ' + u.lvl + '/' + u.max;
+    });
+  }
+
+  function flashBtn(id) {
+    var b = id === 'feed' ? feedBtn : upBtns[id];
+    if (!b) return;
+    b.classList.add('flash');
+    setTimeout(function () { b.classList.remove('flash'); }, 120);
+  }
+
+  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, syncDock: syncDock, flashBtn: flashBtn };
+})();
+
+// ---------------------------------------------------------------------------
+// 11. Main loop
+// ---------------------------------------------------------------------------
+var last = 0;
+function frame(now) {
+  if (!last) last = now;
+  var dt = Math.min(0.05, (now - last) / 1000); // clamp long stalls
+  last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+UI.showTitle();
+requestAnimationFrame(frame);
+
+// Lightweight debug handle — used by the offline verification harness to drive
+// real play (steer toward trees, feed, buy upgrades). Harmless in normal use.
+window.__EMBER = {
+  game: game, survivor: survivor, trees: trees, shades: shades,
+  cfg: CFG, upgrades: UPGRADES, feed: feedFire, buy: buyUpgrade, start: startGame
+};
+
+})();
+</script>
+</body>
+</html>
