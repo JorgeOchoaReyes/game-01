@@ -371,13 +371,13 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,   // playable band (HUD top, dock bottom)
   fuelMax: 100,
   warmthMax: 100,
-  survivorSpeed: 210,
+  survivorSpeed: 215,
   carryBase: 6,
-  gatherTime: 0.9,                       // seconds of contact to pop one wood
-  feedCost: 5, feedGain: 14,             // wood -> fuel
+  gatherTime: 0.65,                      // seconds of contact to pop one wood
+  feedCost: 4, feedGain: 18,             // wood -> fuel
   nights: 5,
-  nightLen: 30,                          // seconds of "night" (enemies)
-  dawnLen: 9                             // seconds of calm between nights
+  nightLen: 26,                          // seconds of "night" (enemies)
+  dawnLen: 10                            // seconds of calm between nights
 };
 
 // Upgrades: spend banked wood. Each reinforces the single-resource economy.
@@ -421,7 +421,7 @@ function fireRadius() {
 }
 function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
 function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3; }
-function burnDps() { return 26 + UPGRADES.ashheart.lvl * 12; }
+function burnDps() { return 34 + UPGRADES.ashheart.lvl * 12; }
 
 // spawn a wood node somewhere in the dark ring around the fire
 function spawnTree() {
@@ -467,7 +467,7 @@ function addParticles(x, y, n, color, spd, life, sz) {
 function startGame() {
   game.state = 'play';
   game.time = 0;
-  game.fuel = 55; game.warmth = 100; game.bank = 0; game.carry = 0;
+  game.fuel = 65; game.warmth = 100; game.bank = 0; game.carry = 0;
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
@@ -535,7 +535,7 @@ function update(dt) {
     // spawn shades across the night, escalating with night number
     var hpMul = 1 + (game.night - 1) * 0.45;
     var spdMul = 1 + (game.night - 1) * 0.12;
-    var ratePerSec = 0.6 + game.night * 0.35;             // shades/sec
+    var ratePerSec = 0.22 + game.night * 0.13;            // shades/sec
     game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
     while (game.nightSpawnAcc >= 1) { spawnShade(hpMul, spdMul); game.nightSpawnAcc -= 1; }
     if (game.phaseTime <= 0) {
@@ -551,7 +551,7 @@ function update(dt) {
   }
 
   // ---- fuel decay (faster at night, faster on higher nights) ----
-  var decay = 1.5 + game.night * 0.35 + (game.phase === 'night' ? 1.4 : 0);
+  var decay = 1.0 + game.night * 0.22 + (game.phase === 'night' ? 1.0 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
 
@@ -576,7 +576,7 @@ function update(dt) {
   var warmthRate;
   if (litByFire) warmthRate = 22;
   else {
-    var coldBase = 9 + game.night * 1.2 + (game.phase === 'night' ? 4 : 0);
+    var coldBase = 6 + game.night * 0.7 + (game.phase === 'night' ? 2 : 0);
     warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12);
   }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
@@ -637,7 +637,7 @@ function update(dt) {
 
     // survivor contact chills you and knocks back
     if (dist2(s.x, s.y, survivor.x, survivor.y) < Math.pow(s.r + survivor.r, 2)) {
-      game.warmth = clamp(game.warmth - 16 * dt * 3, 0, CFG.warmthMax);
+      game.warmth = clamp(game.warmth - 24 * dt, 0, CFG.warmthMax);
       survivor.x -= (toFx / fd) * 40 * dt; survivor.y -= (toFy / fd) * 40 * dt;
     }
 
@@ -646,7 +646,7 @@ function update(dt) {
       s.biteCd -= dt;
       if (s.biteCd <= 0) {
         s.biteCd = 0.6;
-        game.fuel = clamp(game.fuel - 4, 0, CFG.fuelMax + 40);
+        game.fuel = clamp(game.fuel - 3, 0, CFG.fuelMax + 40);
         game.shake = Math.max(game.shake, 6);
         addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3);
         Audio2.bite();
@@ -1147,8 +1147,11 @@ requestAnimationFrame(frame);
 // Lightweight debug handle — used by the offline verification harness to drive
 // real play (steer toward trees, feed, buy upgrades). Harmless in normal use.
 window.__EMBER = {
-  game: game, survivor: survivor, trees: trees, shades: shades,
-  cfg: CFG, upgrades: UPGRADES, feed: feedFire, buy: buyUpgrade, start: startGame
+  game: game, survivor: survivor, trees: trees, shades: shades, input: input,
+  cfg: CFG, upgrades: UPGRADES, feed: feedFire, buy: buyUpgrade, start: startGame,
+  step: function (dt) { update(dt); },      // advance game logic without rendering
+  cost: function (k) { return upgradeCost(UPGRADES[k]); },
+  fireRadius: fireRadius, carryCap: carryCap
 };
 
 })();
