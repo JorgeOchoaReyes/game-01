@@ -421,7 +421,7 @@ function setBanner(main, sub, dur) {
   game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 };
 }
 
-var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: 0, chill: 0 };
+var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false };
 var trees = [];    // wood nodes
 var shades = [];   // enemies
 var particles = [];
@@ -579,10 +579,12 @@ function update(dt) {
   var mvx = 0, mvy = 0, mag = 0;
   if (dir) { mvx = dir.dx; mvy = dir.dy; mag = dir.mag; }
   else if (input.active) { mvx = input.dx; mvy = input.dy; mag = input.mag; }
-  if (mag > 0.05) {
+  survivor.moving = mag > 0.05;
+  if (survivor.moving) {
     survivor.x += mvx * CFG.survivorSpeed * mag * dt;
     survivor.y += mvy * CFG.survivorSpeed * mag * dt;
     survivor.face = Math.atan2(mvy, mvx);
+    survivor.walk += dt * (6 + mag * 6);   // walk-cycle phase
   }
   survivor.x = clamp(survivor.x, 18, VW - 18);
   survivor.y = clamp(survivor.y, CFG.playTop + 10, CFG.playBottom - 6);
@@ -811,20 +813,38 @@ function litFactor(x, y, R) {
 
 function drawTree(t, R) {
   var lf = litFactor(t.x, t.y, R);
+  var sway = Math.sin(game.time * 1.3 + t.sway) * 2.2;
   ctx.save();
   ctx.translate(t.x, t.y);
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(0, 15, t.r * 0.7, 3.5, 0, 0, TAU()); ctx.fill();
   // trunk
-  ctx.fillStyle = 'rgba(120,80,45,' + (0.25 + lf * 0.75) + ')';
-  ctx.fillRect(-4, -2, 8, 16);
-  // canopy (a stumpy bush)
-  ctx.fillStyle = 'rgba(60,120,70,' + (0.22 + lf * 0.78) + ')';
-  ctx.beginPath(); ctx.arc(0, -6, t.r, 0, TAU()); ctx.fill();
-  ctx.fillStyle = 'rgba(90,160,95,' + (0.15 + lf * 0.7) + ')';
-  ctx.beginPath(); ctx.arc(-5, -10, t.r * 0.6, 0, TAU()); ctx.fill();
+  ctx.fillStyle = 'rgba(96,64,38,' + (0.3 + lf * 0.7) + ')';
+  ctx.fillRect(-3.5, 0, 7, 16);
+  ctx.fillStyle = 'rgba(70,46,26,' + (0.3 + lf * 0.7) + ')';
+  ctx.fillRect(0.5, 0, 3, 16);                                   // trunk shading
+  // layered pine-ish foliage (three tiers), swaying at the top
+  function tier(cy, rad, s) {
+    ctx.beginPath();
+    ctx.moveTo(-rad + s * 0.3, cy + rad * 0.7);
+    ctx.lineTo(s, cy - rad);
+    ctx.lineTo(rad + s * 0.3, cy + rad * 0.7);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(46,102,58,' + (0.28 + lf * 0.72) + ')';
+  tier(2, t.r * 1.05, sway * 0.3);
+  ctx.fillStyle = 'rgba(58,124,68,' + (0.26 + lf * 0.74) + ')';
+  tier(-6, t.r * 0.9, sway * 0.6);
+  ctx.fillStyle = 'rgba(96,168,102,' + (0.22 + lf * 0.7) + ')';
+  tier(-13, t.r * 0.66, sway);
+  // wood pips left, so it reads as a harvestable source
+  ctx.fillStyle = 'rgba(190,140,80,' + (0.4 + lf * 0.6) + ')';
+  for (var i = 0; i < t.wood; i++) ctx.fillRect(-8 + i * 3.4, 4, 2.2, 5);
   // chop progress ring
   if (t.chop > 0) {
     ctx.strokeStyle = '#ffce54'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(0, -6, t.r + 5, -Math.PI / 2, -Math.PI / 2 + TAU() * (t.chop / CFG.gatherTime)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -6, t.r + 6, -Math.PI / 2, -Math.PI / 2 + TAU() * (t.chop / CFG.gatherTime)); ctx.stroke();
   }
   ctx.restore();
 }
@@ -834,58 +854,97 @@ function drawShade(s, R) {
   ctx.save();
   ctx.translate(s.x, s.y);
   var bob = Math.sin(s.wob) * 2;
-  // body — a dark tattered blob; brightens (reveals) only when lit
-  ctx.fillStyle = s.hitFlash > 0 ? '#ffffff' : ('rgba(70,50,120,' + (0.35 + lf * 0.55) + ')');
-  ctx.beginPath();
-  ctx.moveTo(0, -s.r + bob);
-  for (var a = 0; a <= TAU() + 0.01; a += Math.PI / 6) {
-    var rr = s.r * (0.8 + 0.25 * Math.sin(a * 3 + s.wob));
-    ctx.lineTo(Math.cos(a - Math.PI / 2) * rr, Math.sin(a - Math.PI / 2) * rr + bob);
+  var reveal = 0.32 + lf * 0.55;              // barely visible in dark, solid in light
+  var body = s.hitFlash > 0 ? '#ffffff' : ('rgba(58,42,104,' + reveal + ')');
+
+  // smoky tail: three tapering wisps drifting behind (opposite the fire)
+  var toFx = CFG.fireX - s.x, toFy = CFG.fireY - s.y;
+  var fl = Math.hypot(toFx, toFy) || 1;
+  var tx = -toFx / fl, ty = -toFy / fl;       // away from fire
+  ctx.fillStyle = 'rgba(58,42,104,' + reveal * 0.5 + ')';
+  for (var w = 0; w < 3; w++) {
+    var wob = Math.sin(s.wob * 1.3 + w) * 4;
+    ctx.beginPath();
+    ctx.arc(tx * (8 + w * 6) + wob, ty * (8 + w * 6) + bob, s.r * (0.5 - w * 0.12), 0, TAU());
+    ctx.fill();
   }
+
+  // hooded body — a ragged wraith with a pointed crown
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(0, -s.r * 1.4 + bob);            // pointed hood top
+  ctx.quadraticCurveTo(s.r * 0.9, -s.r * 0.4 + bob, s.r * 0.8, s.r * 0.5 + bob);
+  // tattered lower hem
+  for (var i = 3; i >= -3; i--) {
+    var hx = (i / 3) * s.r * 0.8;
+    var hy = s.r * (0.5 + 0.32 * (Math.sin(i * 2 + s.wob) * 0.5 + 0.5)) + bob;
+    ctx.lineTo(hx, hy);
+  }
+  ctx.quadraticCurveTo(-s.r * 0.9, -s.r * 0.4 + bob, 0, -s.r * 1.4 + bob);
   ctx.closePath(); ctx.fill();
-  // glowing eyes — always visible so threats read even in the dark
-  ctx.fillStyle = '#c9b6ff';
-  ctx.shadowColor = '#a98cff'; ctx.shadowBlur = 8;
-  ctx.beginPath(); ctx.arc(-4, -2 + bob, 2.4, 0, TAU()); ctx.fill();
-  ctx.beginPath(); ctx.arc(4, -2 + bob, 2.4, 0, TAU()); ctx.fill();
+
+  // glowing eyes — always visible so threats read even in pitch dark
+  ctx.fillStyle = '#d7c4ff';
+  ctx.shadowColor = '#b49cff'; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.ellipse(-3.6, -3 + bob, 1.7, 2.6, 0.3, 0, TAU()); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(3.6, -3 + bob, 1.7, 2.6, -0.3, 0, TAU()); ctx.fill();
   ctx.shadowBlur = 0;
+
   // hp pip
   if (s.hp < s.maxHp) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-10, -s.r - 8, 20, 3);
-    ctx.fillStyle = '#ff5a6a'; ctx.fillRect(-10, -s.r - 8, 20 * clamp(s.hp / s.maxHp, 0, 1), 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-10, -s.r - 12, 20, 3);
+    ctx.fillStyle = '#ff5a6a'; ctx.fillRect(-10, -s.r - 12, 20 * clamp(s.hp / s.maxHp, 0, 1), 3);
   }
   ctx.restore();
 }
 
 function drawFire(R, intensity) {
   var t = game.time;
+  var it = intensity;                         // 0 (dying) .. 1 (roaring)
   ctx.save();
   ctx.translate(CFG.fireX, CFG.fireY);
-  // logs
-  ctx.fillStyle = '#4a2e1c';
-  ctx.fillRect(-22, 8, 44, 8);
+
+  // --- coal bed: always present, so a dead fire still smoulders ---
+  var coalPulse = 0.55 + 0.45 * Math.sin(t * 5.5);
+  for (var c = 0; c < 5; c++) {
+    var cx = -15 + c * 7.5 + Math.sin(c * 1.7) * 1.5;
+    var cg = 0.22 + it * 0.7 * coalPulse;
+    ctx.fillStyle = 'rgba(' + Math.round(110 + it * 145) + ',' + Math.round(28 + it * 62) + ',18,' + cg + ')';
+    ctx.beginPath(); ctx.arc(cx, 9, 3.4, 0, TAU()); ctx.fill();
+  }
+
+  // --- logs ---
+  ctx.fillStyle = '#4a2e1c'; ctx.fillRect(-22, 8, 44, 8);
   ctx.save(); ctx.rotate(0.5); ctx.fillStyle = '#3a2416'; ctx.fillRect(-20, 8, 40, 7); ctx.restore();
-  // flame — layered flickering triangles
-  var flick = 1 + Math.sin(t * 14) * 0.06 + Math.sin(t * 23) * 0.04;
-  var h = (34 + intensity * 46) * flick;
-  var w = 20 + intensity * 20;
-  function flame(scale, color) {
+  if (it > 0.3) { ctx.fillStyle = 'rgba(255,150,60,' + (it - 0.3) * 0.55 + ')'; ctx.fillRect(-22, 8, 44, 2); } // hot rim
+
+  // --- flame: height, width, layers, and colour all scale with fuel ---
+  var flick = 1 + Math.sin(t * 14) * 0.06 + Math.sin(t * 23) * 0.045 + Math.sin(t * 37) * 0.02;
+  var h = (9 + it * 82) * flick;              // near-nub when dying, a tower when fed
+  var w = 7 + it * 33;
+  var sway = Math.sin(t * 3) * (1.5 + it * 4);
+  function flame(scale, color, tip) {
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(0, -h * scale);
-    ctx.quadraticCurveTo(w * scale, -h * scale * 0.35, w * scale * 0.5, 6);
-    ctx.quadraticCurveTo(0, 12, -w * scale * 0.5, 6);
-    ctx.quadraticCurveTo(-w * scale, -h * scale * 0.35, 0, -h * scale);
+    ctx.moveTo(tip * sway, -h * scale);
+    ctx.quadraticCurveTo(w * scale, -h * scale * 0.35, w * scale * 0.5, 7);
+    ctx.quadraticCurveTo(0, 12, -w * scale * 0.5, 7);
+    ctx.quadraticCurveTo(-w * scale, -h * scale * 0.35, tip * sway, -h * scale);
     ctx.fill();
   }
-  ctx.shadowColor = 'rgba(255,140,50,0.9)'; ctx.shadowBlur = 30 + intensity * 30;
-  flame(1.0, '#ff6a1e');
+  ctx.shadowColor = 'rgba(255,140,50,' + (0.45 + it * 0.55) + ')';
+  ctx.shadowBlur = 6 + it * 52;               // glow grows with fuel
+  // outer flame cools to ember-red as it dies, warms to orange when fed
+  flame(1.0, it < 0.35 ? 'rgba(198,66,24,0.92)' : '#ff6a1e', 0.5);
   ctx.shadowBlur = 0;
-  flame(0.7, '#ff9d3a');
-  flame(0.42, '#ffd24a');
-  flame(0.2, '#fff2c0');
-  // rising embers
-  if (Math.random() < 0.5) addParticles(0 + CFG.fireX, -10 + CFG.fireY, 1, '#ffb347', 20, 0.8, 2);
+  if (it > 0.10) flame(0.66, '#ff9d3a', 0.34);
+  if (it > 0.22) flame(0.40, '#ffd24a', 0.20);
+  if (it > 0.42) flame(0.20, '#fff2c0', 0.10); // white-hot core only when strong
+
+  // rising embers — sparse when dying, a shower when roaring
+  if (Math.random() < 0.12 + it * 0.6) {
+    addParticles(CFG.fireX, CFG.fireY - h * 0.4, 1, it > 0.5 ? '#ffd27a' : '#ff8a3a', 18 + it * 34, 0.8, 2);
+  }
   ctx.restore();
 
   // low fuel warning ring
@@ -898,35 +957,76 @@ function drawFire(R, intensity) {
 }
 
 function drawSurvivor() {
+  var t = game.time;
+  var bob = survivor.moving ? Math.sin(survivor.walk) * 1.6 : Math.sin(t * 2) * 0.6;
+  var facingLeft = Math.cos(survivor.face) < 0;
   ctx.save();
   ctx.translate(survivor.x, survivor.y);
-  // little personal glow (a held torch)
-  var tg = ctx.createRadialGradient(0, 0, 2, 0, 0, 46);
-  tg.addColorStop(0, 'rgba(255,200,120,0.4)');
+
+  // personal glow from the torch
+  var tg = ctx.createRadialGradient(0, -4, 2, 0, -4, 50);
+  tg.addColorStop(0, 'rgba(255,200,120,0.42)');
   tg.addColorStop(1, 'rgba(255,200,120,0)');
   ctx.fillStyle = tg;
-  ctx.beginPath(); ctx.arc(0, 0, 46, 0, TAU()); ctx.fill();
-  // shadow
+  ctx.beginPath(); ctx.arc(0, -4, 50, 0, TAU()); ctx.fill();
+
+  // ground shadow
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath(); ctx.ellipse(0, 13, 11, 4, 0, 0, TAU()); ctx.fill();
-  // body — bright so it's always the most legible thing on screen
-  var chillTint = survivor.chill > 0.4 ? Math.floor((survivor.chill - 0.4) * 255) : 0;
-  ctx.fillStyle = 'rgb(255,' + (232 - chillTint * 0.3) + ',' + (200 + chillTint * 0.2) + ')';
-  ctx.beginPath(); ctx.arc(0, -6, 8, 0, TAU()); ctx.fill();       // head
-  ctx.fillStyle = '#e9d9b8';
+  ctx.beginPath(); ctx.ellipse(0, 15, 10, 3.5, 0, 0, TAU()); ctx.fill();
+
+  ctx.save();
+  ctx.scale(facingLeft ? -1 : 1, 1);  // flip to face travel direction
+  ctx.translate(0, bob);
+
+  // legs (shuffle while walking)
+  var step = survivor.moving ? Math.sin(survivor.walk) * 3 : 0;
+  ctx.strokeStyle = '#5a4632'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-2, 10); ctx.lineTo(-3 + step, 16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3, 10); ctx.lineTo(4 - step, 16); ctx.stroke();
+
+  // cloak / body — warm and bright so the player always reads clearly
+  var chill = survivor.chill;
+  var bodyR = 236 - chill * 40, bodyG = 214 - chill * 70, bodyB = 176 + chill * 60;
+  var grad = ctx.createLinearGradient(0, -14, 0, 12);
+  grad.addColorStop(0, 'rgb(' + Math.round(bodyR) + ',' + Math.round(bodyG) + ',' + Math.round(bodyB) + ')');
+  grad.addColorStop(1, 'rgb(' + Math.round(bodyR - 40) + ',' + Math.round(bodyG - 45) + ',' + Math.round(bodyB - 30) + ')');
+  ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(-9, 12); ctx.quadraticCurveTo(0, -8, 9, 12); ctx.closePath(); ctx.fill(); // cloak body
-  // facing pip (a little torch flame in front)
-  var fx = Math.cos(survivor.face) * 12, fy = Math.sin(survivor.face) * 12 - 2;
-  ctx.fillStyle = '#ffca57'; ctx.shadowColor = '#ffb347'; ctx.shadowBlur = 8;
-  ctx.beginPath(); ctx.arc(fx, fy, 3.5, 0, TAU()); ctx.fill();
+  ctx.moveTo(-8, 12);
+  ctx.quadraticCurveTo(-9, -6, -4, -11);   // left shoulder up to hood
+  ctx.quadraticCurveTo(0, -15, 4, -11);
+  ctx.quadraticCurveTo(9, -6, 8, 12);       // right shoulder down
+  ctx.closePath(); ctx.fill();
+
+  // hood opening + face shadow
+  ctx.fillStyle = 'rgba(40,26,20,0.55)';
+  ctx.beginPath(); ctx.ellipse(1, -8, 3.6, 4.4, 0, 0, TAU()); ctx.fill();
+  // a warm glint of face lit by the torch
+  ctx.fillStyle = 'rgba(255,220,170,0.9)';
+  ctx.beginPath(); ctx.arc(2.4, -8, 1.5, 0, TAU()); ctx.fill();
+
+  // torch: a stick out front with a live flame
+  var tx = 9, ty = -6;
+  ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(tx, ty); ctx.stroke();
+  var tflick = 1 + Math.sin(t * 20) * 0.18;
+  ctx.shadowColor = '#ffb347'; ctx.shadowBlur = 12;
+  ctx.fillStyle = '#ff8a2b';
+  ctx.beginPath(); ctx.ellipse(tx, ty - 4, 3, 5.5 * tflick, 0, 0, TAU()); ctx.fill();
+  ctx.fillStyle = '#ffe08a';
+  ctx.beginPath(); ctx.ellipse(tx, ty - 3, 1.5, 3 * tflick, 0, 0, TAU()); ctx.fill();
   ctx.shadowBlur = 0;
-  // carry indicator
+  ctx.restore();
+
+  // carried wood, bundled on the back
   if (game.carry > 0) {
-    ctx.fillStyle = '#c98a4a';
-    for (var i = 0; i < Math.min(game.carry, 6); i++) {
-      ctx.fillRect(-8 + i * 3, -18, 2.4, 6);
+    ctx.save();
+    ctx.rotate(-0.35);
+    for (var i = 0; i < Math.min(game.carry, 8); i++) {
+      ctx.fillStyle = i % 2 ? '#b5793f' : '#c98a4a';
+      ctx.fillRect(-11 + (i % 4) * 3, -20 - Math.floor(i / 4) * 4, 2.6, 8);
     }
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -1047,8 +1147,8 @@ function drawLowFuelText() {
   ctx.globalAlpha = 0.55 + pulse * 0.45;
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ff5a6a';
-  ctx.font = '800 22px "Trebuchet MS", sans-serif';
-  ctx.fillText('⚠ THE FIRE IS DYING — FEED IT', VW / 2, CFG.playBottom + 34);
+  ctx.font = '800 21px "Trebuchet MS", sans-serif';
+  ctx.fillText('⚠ THE FIRE IS DYING — FEED IT', VW / 2, CFG.playBottom - 12);
   ctx.restore();
   ctx.textAlign = 'left';
 }
