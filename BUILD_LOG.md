@@ -7,8 +7,10 @@ prompting an AI coding agent and verifying every pass in a real headless browser
 - **Pitch:** Your campfire is your light, your warmth, your currency, and your only
   weapon — one resource that does everything. Gather wood in the dark, feed the
   fire, and survive five escalating nights.
-- **Tech:** Vanilla JS + HTML5 Canvas 2D, Web Audio for synthesized SFX. No
-  third-party libraries, no external assets, no network requests.
+- **Tech:** Vanilla JS + **Three.js** (WebGL) for 3D rendering, Web Audio for
+  synthesized SFX. Three.js is the only third-party library (bundled in `vendor/`);
+  every model is built procedurally in code, no external assets, no network
+  requests. Started as HTML5 Canvas 2D, then converted to 3D (see passes 8–9).
 
 ---
 
@@ -61,6 +63,21 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
 6. **Feedback & juice.** Particles, screen shake, feed flash, flicker, cold-blue
    vignette, phase banners, a "fire is dying" warning, and synthesized SFX for
    every action.
+7. **Art + fire-scaling pass (still 2D).** Made the flame scale hard with fuel — a
+   white-hot tower with an ember shower when fed, collapsing to a dim nub over
+   glowing coals as it dies — and redrew the survivor (hooded torch-bearer with a
+   walk cycle), trees (layered pines), and shades (wispy wraiths).
+8. **3D conversion (Three.js).** Swapped the presentation layer to a WebGL scene:
+   the fire became a real flickering point light casting **dynamic shadows** from
+   low-poly pines and a torch-bearing survivor. Crucially, the game logic was left
+   byte-identical — logic still runs in the 2D top-down field and is mapped onto the
+   ground plane (x→x, y→z), so every tuned distance/radius/speed carried over. All
+   HUD moved to DOM (meters, banners, joystick, dock, screens) since the canvas is
+   now WebGL. Three.js is bundled in `vendor/` and referenced by relative path in
+   `index.html`; the Artifact preview inlines it (CSP forbids external hosts).
+9. **3D readability fix.** Shades first read as dark rocks, so I made them
+   self-glowing purple wraiths with a soft halo and bright eyes — threats now read
+   at a glance even outside the firelight.
 
 ## Balancing with a bot
 
@@ -76,29 +93,39 @@ through **whole games at logic speed**:
 
 ## Verification harness (`scripts/`)
 
-- `verify.js` — drives real play, asserts feed raises fuel / spends wood and that
-  all four upgrades apply; screenshots key states.
+All browser checks launch headless Chromium with SwiftShader so WebGL renders.
+
+- `verify-game3d.js` — the authoritative 3D check: confirms WebGL renders, drives
+  real play, asserts feed raises fuel and upgrades apply; screenshots key states.
 - `verify-ends.js` — asserts lose, win, and reset-to-play screens all render.
-- `balance.js` — sensible-vs-careless bot cohorts, reports win rates + margins.
+- `balance.js` — sensible-vs-careless bot cohorts (logic-only, no rendering),
+  reports win rates + margins. Re-run on the 3D build: **sensible 5/5, careless 0/5**.
 - `offline-check.js` — records every network request; passes only if nothing is
-  external. Also re-run against the **unzipped `.zip`** (1 request total, the HTML
-  document itself; 0 external; 0 page errors).
+  external. On the 3D build: **2 requests, both local** (`index.html` +
+  `vendor/three.min.js`), 0 external, 0 errors.
+- `verify.js` — the original 2D driver (kept alongside the 2D fallback source).
 
 ## Packaging
 
-`scripts/package.js` rebuilds, stages `index.html` at the **top level** plus a
-`vendor/` folder, and zips it. Final `ember.zip` ≈ **15 KB** (limit 35 MB),
-unminified and readable. No libraries to vendor (documented in `vendor/README.txt`).
+`scripts/package.js` rebuilds, stages `index.html` at the **top level** plus the
+`vendor/` folder (`three.min.js` + README), and zips it. Final `ember.zip` ≈
+**161 KB** (limit 35 MB), unminified and readable. Three.js is the only vendored
+library; it is referenced by relative path, never a CDN.
 
 ## What I deliberately did not build
 
 Per "where not to spend your time": no multiplayer, no physics, no day/night
 *lighting* simulation (phases are a gameplay cadence, not a rendering system), no
-detailed animation. Depth went into the one loop instead.
+detailed creature animation (the survivor is an abstract low-poly figure). Depth
+went into the one loop instead. The 3D pass changed only how the game is *drawn* —
+it did not add systems or complexity to the core loop.
 
 ## Known trade-offs / next steps
 
-- Balance is first-pass but bot-validated; a human playtest is the next step.
+- Balance is bot-validated; a human playtest of the 3D build is the next step
+  (camera feel, movement speed, night readability).
+- The 2D build is preserved (`src/game.js`, `src/style.css`) as a fallback in case
+  the 3D version plays worse than it looks.
 - Could add a couple of distinct shade types (e.g. a fast darter, an armored
-  brute) for more mid-session variety without widening the core.
+  brute) for mid-session variety without widening the core.
 - A local best-score (localStorage) would add a "one more run" hook.

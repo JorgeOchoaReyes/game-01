@@ -5,7 +5,9 @@
 > template fields.
 
 **Genre:** Survival & Resource Management
-**Platform:** Mobile, portrait, single-player, fully offline.
+**Platform:** Mobile, portrait, single-player, fully offline. Rendered in 3D
+(Three.js), so the campfire is a real light that flickers and casts dynamic
+shadows across a low-poly world.
 
 ## Concept
 
@@ -44,14 +46,16 @@ genuine threat, while neglect loses around Night 3–4.
 ## Controls & readability
 
 Drag anywhere for a floating virtual joystick (thumb-friendly, portrait);
-keyboard supported for desktop. Distinct silhouettes and colours keep the state
-readable at a glance: a bright survivor, an orange fire with a visible light pool,
-green wood nodes, and purple shades whose eyes glow even in darkness so threats
-always read. Two clear meters (Fire, Warmth) and big phase banners frame each round.
+keyboard supported for desktop. A fixed, gently-swaying overhead camera keeps the
+fire centred. Distinct shapes and colours keep the state readable: a torch-bearing
+survivor, an orange fire with a visible warm light pool, green pines to harvest,
+and purple wraith-shades that self-glow with bright eyes so threats read even in
+the dark. Two clear meters (Fire, Warmth) and big phase banners frame each round.
 
 ## Feel
 
-Real-time feedback throughout: the flame scales and flickers with fuel, feeding
-sends out a flare that knocks shades back, a cold-blue tint creeps in as warmth
-falls, and a pulsing warning fires when the flame is about to die. Every action has
-a synthesized sound. Clear first, fun second, pretty third.
+Real-time feedback throughout: the flame — and the light it throws — scales with
+fuel, collapsing to embers as it dies and roaring back when fed; feeding sends out
+a flare that knocks shades back; a cold-blue tint creeps in as warmth falls; and a
+pulsing warning fires when the flame is about to die. Every action has a synthesized
+sound. Clear first, fun second, pretty third.
