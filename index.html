@@ -68,6 +68,8 @@ html, body {
 #banner .sub { font-size: 16px; font-weight: 600; color: #f3e9df; margin-top: 4px; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
 #warn { position: absolute; left: 0; right: 0; bottom: 168px; text-align: center; pointer-events: none;
   font-size: 20px; font-weight: 800; color: var(--danger); text-shadow: 0 2px 8px rgba(0,0,0,0.8); opacity: 0; }
+#packhint { position: absolute; left: 0; right: 0; bottom: 198px; text-align: center; pointer-events: none;
+  font-size: 16px; font-weight: 800; color: var(--ember-hot); text-shadow: 0 2px 8px rgba(0,0,0,0.85); opacity: 0; }
 
 /* ---- joystick ---- */
 #stick { position: absolute; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%;
@@ -432,6 +434,7 @@ var Audio2 = (function () {
     resume: resume,
     chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
     fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
+    wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
     sizzle: function () { noise(0.14, 0.06, 2600); },
     feed: function () { tone(180, 0.25, 'sawtooth', 0.18, 420); noise(0.35, 0.28, 900); },
     upgrade: function () { tone(520, 0.12, 'triangle', 0.2); setTimeout(function () { tone(780, 0.18, 'triangle', 0.2); }, 90); },
@@ -459,7 +462,7 @@ var game = {
 };
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
-var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0 };
+var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0, prevPhase: 0 };
 var trees = [], shades = [], particles = [], flares = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
@@ -575,24 +578,37 @@ function update(dt) {
   }
   targetTree = near;
   survivor.chopping = false;
+  game.packFull = false;
   if (near && game.carry < carryCap()) {
     survivor.chopping = true;
     if (!survivor.moving) survivor.face = Math.atan2(near.y - survivor.y, near.x - survivor.x); // turn to face the tree
+    // advance the axe swing and land an impact on every downstroke (so no swing feels dead)
+    survivor.chopT += dt;
+    var phase = (survivor.chopT * 3.2) % 1;
+    if (survivor.prevPhase < 0.5 && phase >= 0.5) {
+      near.hit = 0.18;
+      addParticles(near.x, near.y, 6, '#d8a468', 100, 0.4, 2);     // chips fly on each strike
+      Audio2.chop();
+    }
+    survivor.prevPhase = phase;
+    // wood accumulates toward the next log
     near.chop += dt;
     if (near.chop >= CFG.gatherTime) {
       near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
-      near.hit = 0.2;                                              // recoil impulse
-      addParticles(near.x, near.y, 13, '#c98a4a', 130, 0.55, 3);   // chunkier chips
-      addParticles(near.x, near.y, 6, '#e8c48a', 95, 0.4, 2);
-      Audio2.chop(); UI.flashCarry();
+      near.hit = 0.24;
+      addParticles(near.x, near.y, 12, '#c98a4a', 145, 0.55, 3);   // bigger burst on a log gained
+      Audio2.wood(); UI.flashCarry();
       if (near.wood <= 0) {
         trees.splice(trees.indexOf(near), 1);
-        addParticles(near.x, near.y, 20, '#6a9a55', 150, 0.7, 3); // felled burst
+        addParticles(near.x, near.y, 22, '#6a9a55', 155, 0.7, 3);  // felled burst
         Audio2.fell();
         setTimeout(spawnTree, 1200);
       }
       UI.syncDock();
     }
+  } else {
+    survivor.chopT = 0; survivor.prevPhase = 0;
+    if (near) game.packFull = true;   // standing at a tree but the pack is full
   }
   if (litByFire && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(fireRadius() * 0.5, 2)) {
     if (game.carry > 0) { game.bank += game.carry; game.carry = 0; addParticles(CFG.fireX, CFG.fireY, 6, '#ffd24a', 70, 0.4, 3); UI.syncDock(); }
@@ -723,7 +739,6 @@ function renderScene(dt) {
   var tf;
   if (survivor.chopping) {
     // overhead chop: raise the torch-arm back, then strike down, with a lunge
-    survivor.chopT += dt;
     var strike = Math.sin(((survivor.chopT * 3.2) % 1) * Math.PI);   // 0→1→0, ~3/sec
     torchGrp.rotation.x = -1.15 + strike * 1.95;
     hero.position.set(wx(survivor.x), baseY - strike * 0.05, wz(survivor.y));
@@ -731,7 +746,6 @@ function renderScene(dt) {
     tf = 1 + strike * 0.5 + Math.sin(t * 20) * 0.12;
     torchLight.intensity = 1.15 + strike * 0.6;
   } else {
-    survivor.chopT = 0;
     hero.position.set(wx(survivor.x), baseY, wz(survivor.y));
     var swing = survivor.moving ? Math.sin(survivor.walk) * 0.62 : 0;
     legL.rotation.x = swing; legR.rotation.x = -swing;
@@ -755,16 +769,19 @@ function renderScene(dt) {
     mesh.position.set(wx(tr.x), 0, wz(tr.y));
     var ud = mesh.userData;
     var chopping = (tr === targetTree) && game.carry < carryCap();
-    // the pine visibly shrinks as its wood is chopped down (5 -> felled)
-    ud.pine.scale.setScalar(ud.baseScale * (0.58 + 0.42 * clamp(tr.wood / 5, 0, 1)));
+    if (tr.hit > 0) tr.hit -= dt;
+    var hitK = clamp((tr.hit || 0) / 0.18, 0, 1);
+    // the pine visibly shrinks as its wood is chopped down (5 -> felled), and pops on each hit
+    ud.pine.scale.setScalar(ud.baseScale * (0.58 + 0.42 * clamp(tr.wood / 5, 0, 1)) * (1 + hitK * 0.08));
     // ground ring: green harvestable marker normally, gold + pulsing while chopping
     ud.ring.material.color.setHex(chopping ? 0xffd24a : 0x6ad0a0);
     ud.ring.material.opacity = chopping ? 0.6 + 0.35 * Math.abs(Math.sin(t * 6)) : 0.5;
-    var em = chopping ? 0x1e5e2c : 0x000000;
-    for (var ci = 0; ci < ud.cones.length; ci++) ud.cones[ci].material.emissive.setHex(em);
-    // recoil on each hit, gentle sway while chopping
-    if (tr.hit > 0) tr.hit -= dt;
-    ud.pine.rotation.z = tr.hit > 0 ? Math.sin(t * 55) * 0.14 : (chopping ? Math.sin(t * 30) * 0.04 : 0);
+    // foliage flashes bright on each strike, sits slightly lit while chopping
+    for (var ci = 0; ci < ud.cones.length; ci++) {
+      if (hitK > 0.02) ud.cones[ci].material.emissive.setRGB(0.18 * hitK, 0.55 * hitK, 0.24 * hitK);
+      else ud.cones[ci].material.emissive.setHex(chopping ? 0x1e5e2c : 0x000000);
+    }
+    ud.pine.rotation.z = hitK > 0 ? Math.sin(t * 60) * 0.16 * hitK : (chopping ? Math.sin(t * 30) * 0.04 : 0);
     // chop-progress bar, continuously visible while you chop this tree
     ud.barBg.visible = chopping; ud.barFg.visible = chopping;
     if (chopping) {
@@ -857,6 +874,7 @@ var UI = (function () {
   var banner = el('div'); banner.id = 'banner'; banner.innerHTML = '<div class="main"></div><div class="sub"></div>'; stage.appendChild(banner);
   var bMain = banner.querySelector('.main'), bSub = banner.querySelector('.sub');
   var warn = el('div', null, '⚠ THE FIRE IS DYING — FEED IT'); warn.id = 'warn'; stage.appendChild(warn);
+  var packhint = el('div', null, '🎒 PACK FULL — return to the fire to bank'); packhint.id = 'packhint'; stage.appendChild(packhint);
 
   var stick = el('div'); stick.id = 'stick'; stick.innerHTML = '<i></i>'; stage.appendChild(stick);
   var stickNub = stick.querySelector('i');
@@ -946,6 +964,8 @@ var UI = (function () {
     else banner.style.opacity = 0;
     // warning
     warn.style.opacity = game.fuel < 22 ? (0.55 + 0.45 * Math.sin(game.time * 9)) : 0;
+    // pack-full nudge (why chopping "does nothing")
+    packhint.style.opacity = game.carry >= carryCap() ? (0.7 + 0.3 * Math.sin(game.time * 5)) : 0;
     // tints
     cold.style.opacity = survivor.chill > 0.15 ? (survivor.chill * 0.9) : 0;
     flash.style.opacity = game.flash > 0 ? game.flash * 0.7 : 0;

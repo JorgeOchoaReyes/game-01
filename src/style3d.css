@@ -59,6 +59,8 @@ html, body {
 #banner .sub { font-size: 16px; font-weight: 600; color: #f3e9df; margin-top: 4px; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
 #warn { position: absolute; left: 0; right: 0; bottom: 168px; text-align: center; pointer-events: none;
   font-size: 20px; font-weight: 800; color: var(--danger); text-shadow: 0 2px 8px rgba(0,0,0,0.8); opacity: 0; }
+#packhint { position: absolute; left: 0; right: 0; bottom: 198px; text-align: center; pointer-events: none;
+  font-size: 16px; font-weight: 800; color: var(--ember-hot); text-shadow: 0 2px 8px rgba(0,0,0,0.85); opacity: 0; }
 
 /* ---- joystick ---- */
 #stick { position: absolute; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%;
