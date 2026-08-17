@@ -21,12 +21,13 @@ var THREE = window.THREE;
 // ---------------------------------------------------------------------------
 var VW = 540, VH = 960;
 var K = 0.03;                                  // game-units -> world-units
+var ARENA = 250;                               // play radius in game units (hard bound)
 var CFG = {
   fireX: VW / 2, fireY: VH * 0.60,
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedCost: 4, feedGain: 18, nights: 5, nightLen: 26, dawnLen: 10
+  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -53,9 +54,9 @@ var scene = new THREE.Scene();
 scene.background = new THREE.Color(0x06040c);
 scene.fog = new THREE.FogExp2(0x06040c, 0.05);
 
-var camera = new THREE.PerspectiveCamera(54, 1, 0.1, 100);
-var CAM = new THREE.Vector3(0, 12, 9.6);
-var CAM_LOOK = new THREE.Vector3(0, 0.3, -2.3);
+var camera = new THREE.PerspectiveCamera(56, 1, 0.1, 100);
+var CAM = new THREE.Vector3(0, 13.5, 10.2);
+var CAM_LOOK = new THREE.Vector3(0, 0.2, -2.6);
 camera.position.copy(CAM);
 camera.lookAt(CAM_LOOK);
 
@@ -87,14 +88,20 @@ var ground = new THREE.Mesh(new THREE.CircleGeometry(34, 56), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
-for (var st = 0; st < 26; st++) {
-  var stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.1 + Math.random() * 0.16),
+for (var st = 0; st < 16; st++) {
+  var stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.07 + Math.random() * 0.1),
     new THREE.MeshStandardMaterial({ color: 0x39312b, roughness: 1 }));
-  var sa = Math.random() * TAU(), sd = 2 + Math.random() * 13;
-  stone.position.set(Math.cos(sa) * sd, 0.04, Math.sin(sa) * sd);
+  var sa = Math.random() * TAU(), sd = 2 + Math.random() * 11;
+  stone.position.set(Math.cos(sa) * sd, 0.03, Math.sin(sa) * sd);
   stone.castShadow = true; stone.receiveShadow = true;
   scene.add(stone);
 }
+
+// faint arena boundary so the play area's edge is legible
+var boundR = wr(ARENA);
+var boundary = new THREE.Mesh(new THREE.RingGeometry(boundR - 0.06, boundR + 0.06, 72),
+  new THREE.MeshBasicMaterial({ color: 0x6a5a8a, transparent: true, opacity: 0.14, side: THREE.DoubleSide }));
+boundary.rotation.x = -Math.PI / 2; boundary.position.y = 0.02; scene.add(boundary);
 
 // low-fuel warning ring on the ground
 var warnRing = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.45, 32),
@@ -143,24 +150,31 @@ function resetEmber(i, spread) {
 // ---------------------------------------------------------------------------
 // Survivor mesh
 // ---------------------------------------------------------------------------
-var hero = new THREE.Group(); scene.add(hero);
+var hero = new THREE.Group(); hero.scale.setScalar(0.82); scene.add(hero);
 var cloakMat = new THREE.MeshStandardMaterial({ color: 0xe8d0a0, roughness: 0.9 });
-var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.66, 10), cloakMat);
-torso.position.y = 0.42; torso.castShadow = true; hero.add(torso);
+var bootMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
+// legs (animated) — pivot at the hip so they swing
+var legL = new THREE.Group(); legL.position.set(-0.09, 0.28, 0); hero.add(legL);
+var legR = new THREE.Group(); legR.position.set(0.09, 0.28, 0); hero.add(legR);
+function makeLeg(g) { var m = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.3, 6), bootMat); m.position.y = -0.15; m.castShadow = true; g.add(m); }
+makeLeg(legL); makeLeg(legR);
+var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.6, 10), cloakMat);
+torso.position.y = 0.5; torso.castShadow = true; hero.add(torso);
 var hood = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.46, 10), cloakMat);
-hood.position.y = 0.85; hood.castShadow = true; hero.add(hood);
+hood.position.y = 0.92; hood.castShadow = true; hero.add(hood);
 var faceDark = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12),
   new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 1 }));
-faceDark.position.set(0, 0.78, 0.12); hero.add(faceDark);
-var torchGrp = new THREE.Group(); hero.add(torchGrp);
+faceDark.position.set(0, 0.85, 0.12); hero.add(faceDark);
+// torch arm (swings a little as you walk)
+var torchGrp = new THREE.Group(); torchGrp.position.set(0, 0.62, 0); hero.add(torchGrp);
 var stick = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.56, 6),
   new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 1 }));
-stick.position.set(0.3, 0.56, 0.14); stick.rotation.z = -0.5; torchGrp.add(stick);
+stick.position.set(0.3, -0.04, 0.14); stick.rotation.z = -0.5; torchGrp.add(stick);
 var torchFlame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10),
   new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-torchFlame.position.set(0.46, 0.78, 0.14); torchGrp.add(torchFlame);
+torchFlame.position.set(0.46, 0.18, 0.14); torchGrp.add(torchFlame);
 var torchLight = new THREE.PointLight(0xffb060, 1.3, 5, 2);
-torchLight.position.set(0.46, 0.8, 0.14); torchGrp.add(torchLight);
+torchLight.position.set(0.46, 0.2, 0.14); torchGrp.add(torchLight);
 // carried wood on the back
 var carryGrp = new THREE.Group(); hero.add(carryGrp);
 var carryBlocks = [];
@@ -174,35 +188,63 @@ for (var cb = 0; cb < 8; cb++) {
 // ---------------------------------------------------------------------------
 // Pools: trees, shades, particles, flares
 // ---------------------------------------------------------------------------
+// A simple pine group (used for both harvestable trees and the background treeline).
+function makePine(seed, foliageMats) {
+  var g = new THREE.Group();
+  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 1 }));
+  trunk.position.y = 0.25; trunk.castShadow = true; g.add(trunk);
+  var cones = [];
+  for (var t = 0; t < 3; t++) {
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.58 - t * 0.15, 0.7, 8),
+      new THREE.MeshStandardMaterial({ color: foliageMats[t], roughness: 1 }));
+    cone.position.y = 0.66 + t * 0.38; cone.castShadow = true; cone.receiveShadow = true; g.add(cone); cones.push(cone);
+  }
+  var sc = 0.7 + (seed % 100) / 100 * 0.3; g.scale.setScalar(sc);
+  g.userData.cones = cones;
+  return g;
+}
+
 var treeMap = new Map();
 function buildTree(seed) {
-  var g = new THREE.Group();
-  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.6, 6),
-    new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 1 }));
-  trunk.position.y = 0.3; trunk.castShadow = true; g.add(trunk);
-  var greens = [0x2f6b3a, 0x3c8248, 0x4f9a56];
-  for (var t = 0; t < 3; t++) {
-    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.72 - t * 0.19, 0.85, 8),
-      new THREE.MeshStandardMaterial({ color: greens[t], roughness: 1 }));
-    cone.position.y = 0.78 + t * 0.46; cone.castShadow = true; cone.receiveShadow = true; g.add(cone);
-  }
-  var sc = 0.85 + (seed % 100) / 100 * 0.5; g.scale.set(sc, sc, sc);
+  var g = makePine(seed, [0x2f6b3a, 0x3c8248, 0x4f9a56]);
+  // ground ring marks this pine as harvestable (vs. the background treeline)
+  var ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28),
+    new THREE.MeshBasicMaterial({ color: 0x6ad0a0, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; g.add(ring);
+  // chop-progress bar (billboarded), hidden until you're chopping this tree
+  var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.12), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
+  barBg.position.y = 1.85; barBg.visible = false; g.add(barBg);
+  var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.12), new THREE.MeshBasicMaterial({ color: 0xffce54 }));
+  barFg.position.set(0, 1.85, 0.001); barFg.visible = false; g.add(barFg);
+  g.userData.ring = ring; g.userData.barBg = barBg; g.userData.barFg = barFg;
   scene.add(g); return g;
+}
+
+// static background treeline just outside the arena — atmosphere + a visible edge
+var treeline = new THREE.Group(); scene.add(treeline);
+for (var bl = 0; bl < 22; bl++) {
+  var ba = (bl / 22) * TAU() + (bl % 2) * 0.14;
+  var brad = ARENA + 25 + (bl % 3) * 22;
+  var bp = makePine(bl * 37 + 5, [0x223f28, 0x274a2e, 0x2d5636]);
+  bp.position.set(wx(CFG.fireX + Math.cos(ba) * brad), 0, wz(CFG.fireY + Math.sin(ba) * brad));
+  bp.scale.multiplyScalar(1.1);
+  treeline.add(bp);
 }
 
 var shadeMap = new Map();
 function buildShade() {
   var g = new THREE.Group();
-  var body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.36, 0),
+  var body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0),
     new THREE.MeshStandardMaterial({ color: 0x5140a0, roughness: 1, transparent: true, opacity: 0.94, emissive: 0x3a2478, emissiveIntensity: 0.9 }));
   body.castShadow = true; g.add(body);
   // a soft glow halo so shades read as threats even in the dark
-  var halo = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 12),
+  var halo = new THREE.Mesh(new THREE.SphereGeometry(0.44, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0x7a5cff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
   g.add(halo);
   var eyeMat = new THREE.MeshBasicMaterial({ color: 0xe9e2ff });
-  var eL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat); eL.position.set(-0.1, 0.06, 0.3); g.add(eL);
-  var eR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat); eR.position.set(0.1, 0.06, 0.3); g.add(eR);
+  var eL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeMat); eL.position.set(-0.09, 0.05, 0.26); g.add(eL);
+  var eR = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeMat); eR.position.set(0.09, 0.05, 0.26); g.add(eR);
   var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.09), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5 }));
   barBg.position.y = 0.6; g.add(barBg);
   var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.09), new THREE.MeshBasicMaterial({ color: 0xff5a6a }));
@@ -288,6 +330,7 @@ function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '',
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false };
 var trees = [], shades = [], particles = [], flares = [];
+var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
 function fireRadius() { return 78 + (game.fuel / CFG.fuelMax) * 120 + UPGRADES.stoke.lvl * 14; }
 function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
@@ -295,20 +338,15 @@ function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3; }
 function burnDps() { return 34 + UPGRADES.ashheart.lvl * 12; }
 
 function spawnTree() {
-  for (var tries = 0; tries < 30; tries++) {
-    var a = rand(0, TAU()), d = rand(150, 260);
-    var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d * 0.9;
-    if (x < 30 || x > VW - 30 || y < CFG.playTop + 20 || y > CFG.playBottom - 10) continue;
-    trees.push({ x: x, y: y, r: 15, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
-    return;
-  }
+  // closer to the fire (shorter, clearer gather trips) and always inside the arena
+  var a = rand(0, TAU()), d = rand(78, ARENA - 30);
+  var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
+  trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
 }
 function spawnShade(hpMul, spdMul) {
-  var edge = Math.floor(rand(0, 4)), x, y;
-  if (edge === 0) { x = rand(20, VW - 20); y = CFG.playTop + 4; }
-  else if (edge === 1) { x = rand(20, VW - 20); y = CFG.playBottom - 4; }
-  else if (edge === 2) { x = 12; y = rand(CFG.playTop, CFG.playBottom); }
-  else { x = VW - 12; y = rand(CFG.playTop, CFG.playBottom); }
+  // spawn on a ring just outside the arena, so they always march in on-screen
+  var a = rand(0, TAU()), d = ARENA + 20;
+  var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
   var hp = 3 * hpMul;
   shades.push({ x: x, y: y, r: 12, hp: hp, maxHp: hp, spd: rand(26, 40) * spdMul, biteCd: 0, wob: rand(0, TAU()), hitFlash: 0 });
 }
@@ -361,8 +399,8 @@ function update(dt) {
   if (game.phase === 'dawn') {
     if (game.phaseTime <= 0) { game.phase = 'night'; game.phaseTime = CFG.nightLen; game.nightSpawnAcc = 0; setBanner('NIGHT ' + game.night, 'The dark comes — keep it burning', 2.4); Audio2.night(); }
   } else {
-    var hpMul = 1 + (game.night - 1) * 0.45, spdMul = 1 + (game.night - 1) * 0.12;
-    var ratePerSec = 0.22 + game.night * 0.13;
+    var hpMul = 1 + (game.night - 1) * 0.65, spdMul = 1 + (game.night - 1) * 0.12;
+    var ratePerSec = 0.3 + game.night * 0.22;
     game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
     while (game.nightSpawnAcc >= 1) { spawnShade(hpMul, spdMul); game.nightSpawnAcc -= 1; }
     if (game.phaseTime <= 0) {
@@ -372,7 +410,7 @@ function update(dt) {
       setBanner('DAWN', 'Night ' + (game.night - 1) + ' survived — stock up', 2.8); Audio2.dawn();
     }
   }
-  var decay = 1.0 + game.night * 0.22 + (game.phase === 'night' ? 1.0 : 0);
+  var decay = 1.2 + game.night * 0.30 + (game.phase === 'night' ? 1.4 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
   game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
@@ -386,13 +424,15 @@ function update(dt) {
     survivor.y += mvy * CFG.survivorSpeed * mag * dt;
     survivor.face = Math.atan2(mvy, mvx); survivor.walk += dt * (6 + mag * 6);
   }
-  survivor.x = clamp(survivor.x, 18, VW - 18);
-  survivor.y = clamp(survivor.y, CFG.playTop + 10, CFG.playBottom - 6);
+  // hard radial bound: keep the survivor inside the arena
+  var bdx = survivor.x - CFG.fireX, bdy = survivor.y - CFG.fireY, bd = Math.hypot(bdx, bdy);
+  var maxB = ARENA - 12;
+  if (bd > maxB) { survivor.x = CFG.fireX + bdx / bd * maxB; survivor.y = CFG.fireY + bdy / bd * maxB; }
 
   var litByFire = dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(fireRadius(), 2);
   var warmthRate;
   if (litByFire) warmthRate = 22;
-  else { var coldBase = 6 + game.night * 0.7 + (game.phase === 'night' ? 2 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12); }
+  else { var coldBase = 7 + game.night * 0.9 + (game.phase === 'night' ? 3 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12); }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
   survivor.chill = 1 - game.warmth / CFG.warmthMax;
   if (game.warmth <= 0) { endGame(false); return; }
@@ -400,8 +440,9 @@ function update(dt) {
   var near = null, nearD = 1e9;
   for (var i = 0; i < trees.length; i++) {
     var tt = trees[i], d = dist2(survivor.x, survivor.y, tt.x, tt.y);
-    if (d < Math.pow(tt.r + survivor.r + 6, 2) && d < nearD) { near = tt; nearD = d; }
+    if (d < Math.pow(tt.r + survivor.r + 14, 2) && d < nearD) { near = tt; nearD = d; }
   }
+  targetTree = near;
   if (near && game.carry < carryCap()) {
     near.chop += dt;
     if (near.chop >= CFG.gatherTime) {
@@ -430,7 +471,7 @@ function update(dt) {
     }
     if (fd < 42) {
       s.biteCd -= dt;
-      if (s.biteCd <= 0) { s.biteCd = 0.6; game.fuel = clamp(game.fuel - 3, 0, CFG.fuelMax + 40); game.shake = Math.max(game.shake, 6); addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3); Audio2.bite(); UI.syncDock(); }
+      if (s.biteCd <= 0) { s.biteCd = 0.6; game.fuel = clamp(game.fuel - 4, 0, CFG.fuelMax + 40); game.shake = Math.max(game.shake, 6); addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3); Audio2.bite(); UI.syncDock(); }
     }
     if (s.hp <= 0) { shades.splice(j, 1); game.shadesBurned++; addParticles(s.x, s.y, 12, '#8f79ff', 110, 0.5, 3); Audio2.shadeDie(); }
   }
@@ -517,11 +558,15 @@ function renderScene(dt) {
   if (game.lowFuelWarn > 0) { var wp = 0.5 + 0.5 * Math.sin(t * 9); warnRing.material.opacity = 0.3 + wp * 0.5; warnRing.visible = true; }
   else warnRing.visible = false;
 
-  // survivor
-  hero.position.set(wx(survivor.x), 0, wz(survivor.y));
-  var dirX = Math.cos(survivor.face), dirZ = Math.sin(survivor.face);
-  hero.rotation.y = Math.atan2(dirX, dirZ);
-  hero.position.y = survivor.moving ? Math.abs(Math.sin(survivor.walk)) * 0.05 : 0;
+  // survivor — smooth turning + a proper walk cycle
+  hero.position.set(wx(survivor.x), survivor.moving ? Math.abs(Math.sin(survivor.walk)) * 0.035 : 0, wz(survivor.y));
+  var targetRot = Math.atan2(Math.cos(survivor.face), Math.sin(survivor.face));
+  var da = targetRot - hero.rotation.y;
+  while (da > Math.PI) da -= TAU(); while (da < -Math.PI) da += TAU();
+  hero.rotation.y += da * Math.min(1, dt * 12);              // ease toward facing
+  var swing = survivor.moving ? Math.sin(survivor.walk) * 0.62 : 0;
+  legL.rotation.x = swing; legR.rotation.x = -swing;
+  torchGrp.rotation.x = survivor.moving ? Math.sin(survivor.walk) * 0.14 : Math.sin(t * 2) * 0.03;
   var tf = 1 + Math.sin(t * 20) * 0.2; torchFlame.scale.set(tf, tf, tf);
   torchLight.intensity = 1.1 + Math.sin(t * 18) * 0.3;
   // chill tint on cloak
@@ -530,15 +575,29 @@ function renderScene(dt) {
   // carried wood
   for (var cbi = 0; cbi < carryBlocks.length; cbi++) carryBlocks[cbi].visible = cbi < game.carry;
 
-  // trees — reconcile
+  // trees — reconcile + gather targeting UI
   var seenT = new Set();
   for (var ti = 0; ti < trees.length; ti++) {
     var tr = trees[ti]; seenT.add(tr);
     var mesh = treeMap.get(tr);
     if (!mesh) { mesh = buildTree(tr.seed); treeMap.set(tr, mesh); }
     mesh.position.set(wx(tr.x), 0, wz(tr.y));
-    var chopping = tr.chop > 0;
-    mesh.rotation.z = chopping ? Math.sin(t * 40) * 0.05 : 0;   // shake while chopped
+    var ud = mesh.userData;
+    var isTarget = (tr === targetTree);
+    // ground ring: green marker normally, gold + pulsing when you're on it
+    ud.ring.material.color.setHex(isTarget ? 0xffd24a : 0x6ad0a0);
+    ud.ring.material.opacity = isTarget ? 0.6 + 0.35 * Math.abs(Math.sin(t * 6)) : 0.5;
+    var em = isTarget ? 0x1e5e2c : 0x000000;
+    for (var ci = 0; ci < ud.cones.length; ci++) ud.cones[ci].material.emissive.setHex(em);
+    // chop-progress bar above the tree
+    var show = isTarget && tr.chop > 0;
+    ud.barBg.visible = show; ud.barFg.visible = show;
+    if (show) {
+      var pr = clamp(tr.chop / CFG.gatherTime, 0, 1);
+      ud.barFg.scale.x = pr; ud.barFg.position.x = -0.4 * (1 - pr);
+      ud.barBg.quaternion.copy(camera.quaternion); ud.barFg.quaternion.copy(camera.quaternion);
+    }
+    mesh.rotation.z = show ? Math.sin(t * 40) * 0.05 : 0;      // shake while chopping
   }
   treeMap.forEach(function (mesh, tr) { if (!seenT.has(tr)) { scene.remove(mesh); disposeGroup(mesh); treeMap.delete(tr); } });
 

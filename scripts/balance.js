@@ -47,7 +47,9 @@ const server = http.createServer((req, res) => {
       while (G.state === 'play' && guard < 30000) {
         guard++;
         const cap = E.carryCap();
-        if (G.bank >= 5 && G.fuel < policy.feedAt) { E.feed(); feeds++; }
+        // reckless play sometimes just forgets to feed
+        const skip = policy.skipFeed && Math.random() < policy.skipFeed;
+        if (!skip && G.bank >= 5 && G.fuel < policy.feedAt) { E.feed(); feeds++; }
         if (G.fuel > 62 && G.warmth > 55) {
           for (const k of ['stoke', 'satchel', 'ashheart', 'coat']) {
             if (E.upgrades[k].lvl < E.upgrades[k].max && G.bank >= E.cost(k) + 10) { E.buy(k); buys++; break; }
@@ -68,9 +70,11 @@ const server = http.createServer((req, res) => {
     }
 
     const sensible = { name: 'sensible', feedAt: 48, warmAt: 28, noise: 0 };
-    const careless = { name: 'careless', feedAt: 26, warmAt: 14, noise: 0.6 };
+    const careless = { name: 'careless', feedAt: 30, warmAt: 16, noise: 0.6 };
+    const reckless = { name: 'reckless', feedAt: 22, warmAt: 10, noise: 0.9, skipFeed: 0.35 };
     for (let g = 0; g < N; g++) results.push(play(sensible));
     for (let g = 0; g < N; g++) results.push(play(careless));
+    for (let g = 0; g < N; g++) results.push(play(reckless));
     return results;
   }, 5);
 
