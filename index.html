@@ -57,8 +57,10 @@ html, body {
 .meter .lbl { left: 8px; } .meter .val { right: 8px; font-variant-numeric: tabular-nums; }
 
 .woodrow { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700; margin-top: 2px; }
-.woodrow .bank { color: #e0aa6a; } .woodrow .carry { color: var(--ash); }
+.woodrow .bank { color: #e0aa6a; } .woodrow .carry { color: var(--ash); display: inline-block; }
 .woodrow .carry.full { color: var(--ember-hot); }
+@keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.28); color: #ffe08a; } 100% { transform: scale(1); } }
+.woodrow .carry.pop { animation: carrypop 0.28s ease-out; }
 
 /* ---- banner + warning ---- */
 #banner { position: absolute; top: 30%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
@@ -193,7 +195,8 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // lights: dim cold ambient so shadows read as blue-black, plus the fire
-scene.add(new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.5));
+var ambient = new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.5);
+scene.add(ambient);
 var fireLight = new THREE.PointLight(0xff8a3a, 6, 20, 2);
 fireLight.position.set(0, 1.2, 0);
 fireLight.castShadow = true;
@@ -331,17 +334,19 @@ function makePine(seed, foliageMats) {
 
 var treeMap = new Map();
 function buildTree(seed) {
-  var g = makePine(seed, [0x2f6b3a, 0x3c8248, 0x4f9a56]);
+  var g = new THREE.Group();
+  var pine = makePine(seed, [0x2f6b3a, 0x3c8248, 0x4f9a56]);   // shrinks as it is chopped
+  g.add(pine);
   // ground ring marks this pine as harvestable (vs. the background treeline)
   var ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28),
     new THREE.MeshBasicMaterial({ color: 0x6ad0a0, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; g.add(ring);
-  // chop-progress bar (billboarded), hidden until you're chopping this tree
-  var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.12), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
-  barBg.position.y = 1.85; barBg.visible = false; g.add(barBg);
-  var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.12), new THREE.MeshBasicMaterial({ color: 0xffce54 }));
-  barFg.position.set(0, 1.85, 0.001); barFg.visible = false; g.add(barFg);
-  g.userData.ring = ring; g.userData.barBg = barBg; g.userData.barFg = barFg;
+  // chop-progress bar (billboarded), shown while you're chopping this tree
+  var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.14), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 }));
+  barBg.position.y = 1.8; barBg.visible = false; g.add(barBg);
+  var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.14), new THREE.MeshBasicMaterial({ color: 0xffce54 }));
+  barFg.position.set(0, 1.8, 0.001); barFg.visible = false; g.add(barFg);
+  g.userData = { pine: pine, cones: pine.userData.cones, ring: ring, barBg: barBg, barFg: barFg, baseScale: pine.scale.x };
   scene.add(g); return g;
 }
 
@@ -369,10 +374,10 @@ function buildShade() {
   var eyeMat = new THREE.MeshBasicMaterial({ color: 0xe9e2ff });
   var eL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeMat); eL.position.set(-0.09, 0.05, 0.26); g.add(eL);
   var eR = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeMat); eR.position.set(0.09, 0.05, 0.26); g.add(eR);
-  var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.09), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5 }));
-  barBg.position.y = 0.6; g.add(barBg);
-  var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.09), new THREE.MeshBasicMaterial({ color: 0xff5a6a }));
-  barFg.position.set(0, 0.6, 0.001); g.add(barFg);
+  var barBg = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.13), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
+  barBg.position.y = 0.66; g.add(barBg);
+  var barFg = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.13), new THREE.MeshBasicMaterial({ color: 0xff5a6a }));
+  barFg.position.set(0, 0.66, 0.001); g.add(barFg);
   g.userData = { body: body, barBg: barBg, barFg: barFg };
   scene.add(g); return g;
 }
@@ -426,6 +431,8 @@ var Audio2 = (function () {
   return {
     resume: resume,
     chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
+    fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
+    sizzle: function () { noise(0.14, 0.06, 2600); },
     feed: function () { tone(180, 0.25, 'sawtooth', 0.18, 420); noise(0.35, 0.28, 900); },
     upgrade: function () { tone(520, 0.12, 'triangle', 0.2); setTimeout(function () { tone(780, 0.18, 'triangle', 0.2); }, 90); },
     shadeDie: function () { noise(0.18, 0.22, 700); tone(90, 0.18, 'sine', 0.12, 40); },
@@ -564,7 +571,7 @@ function update(dt) {
   var near = null, nearD = 1e9;
   for (var i = 0; i < trees.length; i++) {
     var tt = trees[i], d = dist2(survivor.x, survivor.y, tt.x, tt.y);
-    if (d < Math.pow(tt.r + survivor.r + 14, 2) && d < nearD) { near = tt; nearD = d; }
+    if (d < Math.pow(tt.r + survivor.r + 20, 2) && d < nearD) { near = tt; nearD = d; }
   }
   targetTree = near;
   survivor.chopping = false;
@@ -574,8 +581,16 @@ function update(dt) {
     near.chop += dt;
     if (near.chop >= CFG.gatherTime) {
       near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
-      addParticles(near.x, near.y, 7, '#c98a4a', 90, 0.5, 3); Audio2.chop();
-      if (near.wood <= 0) { trees.splice(trees.indexOf(near), 1); setTimeout(spawnTree, 1200); }
+      near.hit = 0.2;                                              // recoil impulse
+      addParticles(near.x, near.y, 13, '#c98a4a', 130, 0.55, 3);   // chunkier chips
+      addParticles(near.x, near.y, 6, '#e8c48a', 95, 0.4, 2);
+      Audio2.chop(); UI.flashCarry();
+      if (near.wood <= 0) {
+        trees.splice(trees.indexOf(near), 1);
+        addParticles(near.x, near.y, 20, '#6a9a55', 150, 0.7, 3); // felled burst
+        Audio2.fell();
+        setTimeout(spawnTree, 1200);
+      }
       UI.syncDock();
     }
   }
@@ -584,14 +599,18 @@ function update(dt) {
   }
   if (trees.length < 5 && Math.random() < dt * 0.8) spawnTree();
 
-  var R = fireRadius(), dps = burnDps();
+  var R = fireRadius(), dps = burnDps(), anyBurning = false;
   for (var j = shades.length - 1; j >= 0; j--) {
-    var s = shades[j]; s.wob += dt * 4;
+    var s = shades[j]; s.wob += dt * 4; s.burning = false;
     var toFx = CFG.fireX - s.x, toFy = CFG.fireY - s.y, fd = Math.hypot(toFx, toFy) || 1;
     s.x += (toFx / fd) * s.spd * dt + Math.cos(s.wob) * 8 * dt;
     s.y += (toFy / fd) * s.spd * dt + Math.sin(s.wob) * 8 * dt;
     if (s.hitFlash > 0) s.hitFlash -= dt;
-    if (fd < R) { var burn = dps * (0.4 + fireIntensity() * 0.8) * (1 - fd / R + 0.25) * dt; s.hp -= burn; if (Math.random() < dt * 8) addParticles(s.x, s.y, 1, '#ff7b3a', 40, 0.3, 2); }
+    if (fd < R) {
+      var burn = dps * (0.4 + fireIntensity() * 0.8) * (1 - fd / R + 0.25) * dt;
+      s.hp -= burn; s.burning = true; anyBurning = true;
+      if (Math.random() < dt * 18) addParticles(s.x, s.y, 1, '#ff9d3a', 55, 0.35, 2); // singe embers
+    }
     if (dist2(s.x, s.y, survivor.x, survivor.y) < Math.pow(s.r + survivor.r, 2)) {
       game.warmth = clamp(game.warmth - 24 * dt, 0, CFG.warmthMax);
       survivor.x -= (toFx / fd) * 40 * dt; survivor.y -= (toFy / fd) * 40 * dt;
@@ -600,8 +619,14 @@ function update(dt) {
       s.biteCd -= dt;
       if (s.biteCd <= 0) { s.biteCd = 0.6; game.fuel = clamp(game.fuel - 4, 0, CFG.fuelMax + 40); game.shake = Math.max(game.shake, 6); addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3); Audio2.bite(); UI.syncDock(); }
     }
-    if (s.hp <= 0) { shades.splice(j, 1); game.shadesBurned++; addParticles(s.x, s.y, 12, '#8f79ff', 110, 0.5, 3); Audio2.shadeDie(); }
+    if (s.hp <= 0) {
+      shades.splice(j, 1); game.shadesBurned++;
+      addParticles(s.x, s.y, 16, '#8f79ff', 120, 0.5, 3);   // soul burst
+      addParticles(s.x, s.y, 9, '#ff9d3a', 150, 0.45, 3);   // + fire flash
+      Audio2.shadeDie();
+    }
   }
+  if (anyBurning && Math.random() < dt * 5) Audio2.sizzle();
   for (var f = flares.length - 1; f >= 0; f--) {
     var fl = flares[f]; fl.life -= dt; fl.r = lerp(fl.max, 20, fl.life / fl.maxLife);
     for (var q = shades.length - 1; q >= 0; q--) {
@@ -660,9 +685,13 @@ function renderScene(dt) {
 
   // fire flame + light scale with fuel
   var flick = 1 + Math.sin(t * 14) * 0.07 + Math.sin(t * 27) * 0.05 + (Math.random() - 0.5) * 0.05;
-  fireLight.intensity = (0.8 + it * 6.2) * flick;
-  fireLight.distance = Math.max(6, wr(fireRadius()) * 2.6);
+  // light scales hard with fuel: a dying fire throws a small, dim pool
+  fireLight.intensity = (0.35 + it * 7.2) * flick;
+  fireLight.distance = 3.0 + it * 10.5;
   fireLight.position.x = Math.sin(t * 9) * 0.06;
+  // the whole world darkens as the fire fails (with a readable floor)
+  ambient.intensity = 0.24 + it * 0.34;
+  moonLight.intensity = 0.28 + it * 0.14;
   var fs = 0.32 + it * 1.05;
   flameOuter.scale.set(fs, fs * flick, fs); flameOuter.position.y = 0.18 + fs * 0.72;
   flameMid.scale.set(fs, fs * 1.1 * flick, fs); flameMid.position.y = 0.18 + fs * 0.56;
@@ -725,21 +754,24 @@ function renderScene(dt) {
     if (!mesh) { mesh = buildTree(tr.seed); treeMap.set(tr, mesh); }
     mesh.position.set(wx(tr.x), 0, wz(tr.y));
     var ud = mesh.userData;
-    var isTarget = (tr === targetTree);
-    // ground ring: green marker normally, gold + pulsing when you're on it
-    ud.ring.material.color.setHex(isTarget ? 0xffd24a : 0x6ad0a0);
-    ud.ring.material.opacity = isTarget ? 0.6 + 0.35 * Math.abs(Math.sin(t * 6)) : 0.5;
-    var em = isTarget ? 0x1e5e2c : 0x000000;
+    var chopping = (tr === targetTree) && game.carry < carryCap();
+    // the pine visibly shrinks as its wood is chopped down (5 -> felled)
+    ud.pine.scale.setScalar(ud.baseScale * (0.58 + 0.42 * clamp(tr.wood / 5, 0, 1)));
+    // ground ring: green harvestable marker normally, gold + pulsing while chopping
+    ud.ring.material.color.setHex(chopping ? 0xffd24a : 0x6ad0a0);
+    ud.ring.material.opacity = chopping ? 0.6 + 0.35 * Math.abs(Math.sin(t * 6)) : 0.5;
+    var em = chopping ? 0x1e5e2c : 0x000000;
     for (var ci = 0; ci < ud.cones.length; ci++) ud.cones[ci].material.emissive.setHex(em);
-    // chop-progress bar above the tree
-    var show = isTarget && tr.chop > 0;
-    ud.barBg.visible = show; ud.barFg.visible = show;
-    if (show) {
+    // recoil on each hit, gentle sway while chopping
+    if (tr.hit > 0) tr.hit -= dt;
+    ud.pine.rotation.z = tr.hit > 0 ? Math.sin(t * 55) * 0.14 : (chopping ? Math.sin(t * 30) * 0.04 : 0);
+    // chop-progress bar, continuously visible while you chop this tree
+    ud.barBg.visible = chopping; ud.barFg.visible = chopping;
+    if (chopping) {
       var pr = clamp(tr.chop / CFG.gatherTime, 0, 1);
-      ud.barFg.scale.x = pr; ud.barFg.position.x = -0.4 * (1 - pr);
+      ud.barFg.scale.x = Math.max(0.001, pr); ud.barFg.position.x = -0.41 * (1 - pr);
       ud.barBg.quaternion.copy(camera.quaternion); ud.barFg.quaternion.copy(camera.quaternion);
     }
-    mesh.rotation.z = show ? Math.sin(t * 40) * 0.05 : 0;      // shake while chopping
   }
   treeMap.forEach(function (mesh, tr) { if (!seenT.has(tr)) { scene.remove(mesh); disposeGroup(mesh); treeMap.delete(tr); } });
 
@@ -753,8 +785,14 @@ function renderScene(dt) {
     sg.position.set(wx(sh.x), by, wz(sh.y));
     sg.lookAt(0, by, 0);
     var ud = sg.userData;
-    ud.body.material.emissive.setHex(sh.hitFlash > 0 ? 0xffffff : 0x3a2478);
-    ud.body.material.color.setHex(sh.hitFlash > 0 ? 0xffffff : 0x5140a0);
+    if (sh.hitFlash > 0) { ud.body.material.emissive.setHex(0xffffff); ud.body.material.color.setHex(0xffffff); }
+    else {
+      // ease a "burning" glow: purple shade -> hot orange while inside the firelight
+      sh.glow = lerp(sh.glow || 0, sh.burning ? 1 : 0, Math.min(1, dt * 8));
+      var gG = sh.glow;
+      ud.body.material.emissive.setRGB(lerp(0.23, 1.0, gG), lerp(0.14, 0.42, gG), lerp(0.47, 0.05, gG));
+      ud.body.material.color.setRGB(lerp(0.32, 1.0, gG), lerp(0.25, 0.5, gG), lerp(0.63, 0.2, gG));
+    }
     var hpR = clamp(sh.hp / sh.maxHp, 0, 1);
     var showBar = hpR < 0.999;
     ud.barBg.visible = showBar; ud.barFg.visible = showBar;
@@ -883,6 +921,7 @@ var UI = (function () {
     });
   }
   function flashBtn(id) { var b = id === 'feed' ? feedBtn : upBtns[id]; if (!b) return; b.classList.add('flash'); setTimeout(function () { b.classList.remove('flash'); }, 120); }
+  function flashCarry() { elCarry.classList.remove('pop'); void elCarry.offsetWidth; elCarry.classList.add('pop'); }
 
   function updateHUD() {
     if (game.state !== 'play') return;
@@ -915,7 +954,7 @@ var UI = (function () {
     else stick.style.opacity = 0;
   }
 
-  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, syncDock: syncDock, flashBtn: flashBtn, updateHUD: updateHUD };
+  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD };
 })();
 
 // ---------------------------------------------------------------------------
