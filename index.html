@@ -452,7 +452,7 @@ var game = {
 };
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
-var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false };
+var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0 };
 var trees = [], shades = [], particles = [], flares = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
@@ -567,7 +567,10 @@ function update(dt) {
     if (d < Math.pow(tt.r + survivor.r + 14, 2) && d < nearD) { near = tt; nearD = d; }
   }
   targetTree = near;
+  survivor.chopping = false;
   if (near && game.carry < carryCap()) {
+    survivor.chopping = true;
+    if (!survivor.moving) survivor.face = Math.atan2(near.y - survivor.y, near.x - survivor.x); // turn to face the tree
     near.chop += dt;
     if (near.chop >= CFG.gatherTime) {
       near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
@@ -682,17 +685,32 @@ function renderScene(dt) {
   if (game.lowFuelWarn > 0) { var wp = 0.5 + 0.5 * Math.sin(t * 9); warnRing.material.opacity = 0.3 + wp * 0.5; warnRing.visible = true; }
   else warnRing.visible = false;
 
-  // survivor — smooth turning + a proper walk cycle
-  hero.position.set(wx(survivor.x), survivor.moving ? Math.abs(Math.sin(survivor.walk)) * 0.035 : 0, wz(survivor.y));
+  // survivor — smooth turning, a walk cycle, and a chop/attack swing
   var targetRot = Math.atan2(Math.cos(survivor.face), Math.sin(survivor.face));
   var da = targetRot - hero.rotation.y;
   while (da > Math.PI) da -= TAU(); while (da < -Math.PI) da += TAU();
   hero.rotation.y += da * Math.min(1, dt * 12);              // ease toward facing
-  var swing = survivor.moving ? Math.sin(survivor.walk) * 0.62 : 0;
-  legL.rotation.x = swing; legR.rotation.x = -swing;
-  torchGrp.rotation.x = survivor.moving ? Math.sin(survivor.walk) * 0.14 : Math.sin(t * 2) * 0.03;
-  var tf = 1 + Math.sin(t * 20) * 0.2; torchFlame.scale.set(tf, tf, tf);
-  torchLight.intensity = 1.1 + Math.sin(t * 18) * 0.3;
+  var baseY = survivor.moving ? Math.abs(Math.sin(survivor.walk)) * 0.035 : 0;
+  var tf;
+  if (survivor.chopping) {
+    // overhead chop: raise the torch-arm back, then strike down, with a lunge
+    survivor.chopT += dt;
+    var strike = Math.sin(((survivor.chopT * 3.2) % 1) * Math.PI);   // 0→1→0, ~3/sec
+    torchGrp.rotation.x = -1.15 + strike * 1.95;
+    hero.position.set(wx(survivor.x), baseY - strike * 0.05, wz(survivor.y));
+    legL.rotation.x = 0.18; legR.rotation.x = -0.18;                 // braced stance
+    tf = 1 + strike * 0.5 + Math.sin(t * 20) * 0.12;
+    torchLight.intensity = 1.15 + strike * 0.6;
+  } else {
+    survivor.chopT = 0;
+    hero.position.set(wx(survivor.x), baseY, wz(survivor.y));
+    var swing = survivor.moving ? Math.sin(survivor.walk) * 0.62 : 0;
+    legL.rotation.x = swing; legR.rotation.x = -swing;
+    torchGrp.rotation.x = survivor.moving ? Math.sin(survivor.walk) * 0.14 : Math.sin(t * 2) * 0.03;
+    tf = 1 + Math.sin(t * 20) * 0.2;
+    torchLight.intensity = 1.1 + Math.sin(t * 18) * 0.3;
+  }
+  torchFlame.scale.set(tf, tf, tf);
   // chill tint on cloak
   var chill = survivor.chill;
   cloakMat.color.setRGB(0.91 - chill * 0.28, 0.82 - chill * 0.34, 0.63 + chill * 0.3);
