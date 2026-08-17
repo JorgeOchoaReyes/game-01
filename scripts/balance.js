@@ -18,7 +18,7 @@ const server = http.createServer((req, res) => {
 });
 (async () => {
   await new Promise((r) => server.listen(PORT, r));
-  const browser = await chromium.launch({ executablePath: EXEC });
+  const browser = await chromium.launch({ executablePath: EXEC, args: ['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist','--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'load' });
 

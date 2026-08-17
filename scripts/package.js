@@ -20,6 +20,7 @@ fs.mkdirSync(path.join(STAGE, 'vendor'), { recursive: true });
 // 3. Copy the exact files the game needs at runtime
 fs.copyFileSync(path.join(ROOT, 'index.html'), path.join(STAGE, 'index.html'));
 fs.copyFileSync(path.join(ROOT, 'vendor', 'README.txt'), path.join(STAGE, 'vendor', 'README.txt'));
+fs.copyFileSync(path.join(ROOT, 'vendor', 'three.min.js'), path.join(STAGE, 'vendor', 'three.min.js'));
 
 // 4. Zip (index.html must be at the top level of the archive)
 fs.rmSync(ZIP, { force: true });

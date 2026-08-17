@@ -16,7 +16,7 @@ const server = http.createServer((req, res) => {
 });
 (async () => {
   await new Promise((r) => server.listen(PORT, r));
-  const browser = await chromium.launch({ executablePath: EXEC });
+  const browser = await chromium.launch({ executablePath: EXEC, args: ['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist','--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 420, height: 820 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
