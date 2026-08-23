@@ -338,6 +338,18 @@ for (var cb = 0; cb < 8; cb++) {
   blk.position.set(-0.12 + (cb % 4) * 0.08, 0.5 + Math.floor(cb / 4) * 0.1, -0.22);
   blk.castShadow = true; blk.visible = false; carryGrp.add(blk); carryBlocks.push(blk);
 }
+// floating pack meter above the survivor's head (so carry status is always in view)
+var packUI = new THREE.Group(); scene.add(packUI);
+var packBg = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.16),
+  new THREE.MeshBasicMaterial({ color: 0x120c14, transparent: true, opacity: 0.7 }));
+packUI.add(packBg);
+var packFill = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.1),
+  new THREE.MeshBasicMaterial({ color: 0xd8a066 }));
+packFill.position.z = 0.002; packUI.add(packFill);
+var packIcon = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.14),
+  new THREE.MeshBasicMaterial({ color: 0xe0a866, transparent: true, opacity: 0.9 }));
+packIcon.position.set(-0.48, 0, 0.002); packUI.add(packIcon);
+packUI.visible = false;
 
 // ---------------------------------------------------------------------------
 // Pools: trees, shades, particles, flares
@@ -530,10 +542,17 @@ function moveSpeed() { return CFG.survivorSpeed * (buffOn('swift') ? 1.6 : 1); }
 function gatherTime() { return CFG.gatherTime * (buffOn('harvest') ? 0.5 : 1); }
 
 function spawnTree() {
-  // closer to the fire (shorter, clearer gather trips) and always inside the arena
-  var a = rand(0, TAU()), d = rand(78, ARENA - 30);
-  var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
-  trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
+  // always inside the reachable arena, not on the bank zone, not overlapping another tree
+  for (var tries = 0; tries < 28; tries++) {
+    var a = rand(0, TAU()), d = rand(95, ARENA - 24);
+    var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
+    var ok = true;
+    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 46 * 46) { ok = false; break; } }
+    if (!ok) continue;
+    trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
+    return true;
+  }
+  return false;
 }
 function spawnShade(hpMul, spdMul, kind) {
   // spawn on a ring just outside the arena, so they always march in on-screen
@@ -587,7 +606,7 @@ function startGame() {
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
-  game.buffs = {};
+  game.buffs = {}; game.treeTimer = 0;
   game.banner = null; game.tipShown = false;
   for (var i = 0; i < 6; i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
@@ -717,7 +736,7 @@ function update(dt) {
         trees.splice(trees.indexOf(near), 1);
         addParticles(near.x, near.y, 22, '#6a9a55', 155, 0.7, 3);  // felled burst
         Audio2.fell();
-        setTimeout(spawnTree, 1200);
+        // regrow is handled by the deterministic top-up below (survives restarts)
       }
       UI.syncDock();
     }
@@ -729,7 +748,12 @@ function update(dt) {
   if (dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
     if (game.carry > 0) { game.bank += game.carry; game.carry = 0; addParticles(CFG.fireX, CFG.fireY, 8, '#ffd24a', 80, 0.45, 3); Audio2.wood(); UI.syncDock(); }
   }
-  if (trees.length < 5 && Math.random() < dt * 0.8) spawnTree();
+  // keep the forest stocked with reachable trees (deterministic top-up to 6;
+  // refills faster the emptier it gets, so heavy gathering never runs it dry)
+  if (trees.length < 6) {
+    game.treeTimer = (game.treeTimer || 0) - dt;
+    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = trees.length < 3 ? 0.25 : 0.6; }
+  } else game.treeTimer = 0;
 
   var R = fireRadius(), dps = burnDps(), anyBurning = false;
   for (var j = shades.length - 1; j >= 0; j--) {
@@ -887,8 +911,20 @@ function renderScene(dt) {
   // chill tint on cloak
   var chill = survivor.chill;
   cloakMat.color.setRGB(0.91 - chill * 0.28, 0.82 - chill * 0.34, 0.63 + chill * 0.3);
-  // carried wood
+  // carried wood on the back
   for (var cbi = 0; cbi < carryBlocks.length; cbi++) carryBlocks[cbi].visible = cbi < game.carry;
+  // floating pack meter above the head — visible whenever carrying
+  var pcap = carryCap();
+  if (game.carry > 0) {
+    packUI.visible = true;
+    packUI.position.set(wx(survivor.x), 1.55, wz(survivor.y));
+    packUI.quaternion.copy(camera.quaternion);
+    var pfr = clamp(game.carry / pcap, 0, 1), pFull = game.carry >= pcap;
+    packFill.scale.x = Math.max(0.03, pfr);
+    packFill.position.x = -0.36 * (1 - pfr);
+    packFill.material.color.setHex(pFull ? 0xffd24a : 0xd8a066);
+    if (pFull) { var pp = 0.6 + 0.4 * Math.abs(Math.sin(t * 6)); packFill.material.color.setRGB(1, 0.82 + pp * 0.12, 0.3); }
+  } else packUI.visible = false;
 
   // trees — reconcile + gather targeting UI
   var seenT = new Set();
