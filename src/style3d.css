@@ -47,11 +47,17 @@ html, body {
 .meter span { position: absolute; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 .meter .lbl { left: 8px; } .meter .val { right: 8px; font-variant-numeric: tabular-nums; }
 
-.woodrow { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700; margin-top: 2px; }
-.woodrow .bank { color: #e0aa6a; } .woodrow .carry { color: var(--ash); display: inline-block; }
-.woodrow .carry.full { color: var(--ember-hot); }
-@keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.28); color: #ffe08a; } 100% { transform: scale(1); } }
-.woodrow .carry.pop { animation: carrypop 0.28s ease-out; }
+.woodrow { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; font-weight: 700; margin-top: 3px; }
+.woodrow .bank { color: #e0aa6a; }
+.carrywrap { display: inline-flex; align-items: center; gap: 7px; transform-origin: right center; }
+.carrywrap > em { font-size: 11px; font-style: normal; letter-spacing: 1px; color: var(--ash); }
+.pips { display: inline-flex; gap: 3px; }
+.pip { width: 10px; height: 13px; border-radius: 2px; border: 1.5px solid rgba(201,138,74,0.55); background: transparent; }
+.pip.on { background: linear-gradient(180deg, #e0a866, #b5793f); border-color: #e0a866; box-shadow: 0 0 5px rgba(224,168,102,0.5); }
+.carrywrap.full .pip.on { background: linear-gradient(180deg, #ffe08a, #ff9d3a); border-color: #ffe08a; box-shadow: 0 0 7px rgba(255,190,90,0.8); }
+.carrywrap.full > em { color: var(--ember-hot); }
+@keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.carrywrap.pop { animation: carrypop 0.26s ease-out; }
 
 /* ---- active ability buffs ---- */
 #buffs { position: absolute; top: 128px; left: 14px; right: 14px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }

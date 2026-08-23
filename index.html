@@ -56,11 +56,17 @@ html, body {
 .meter span { position: absolute; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 .meter .lbl { left: 8px; } .meter .val { right: 8px; font-variant-numeric: tabular-nums; }
 
-.woodrow { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700; margin-top: 2px; }
-.woodrow .bank { color: #e0aa6a; } .woodrow .carry { color: var(--ash); display: inline-block; }
-.woodrow .carry.full { color: var(--ember-hot); }
-@keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.28); color: #ffe08a; } 100% { transform: scale(1); } }
-.woodrow .carry.pop { animation: carrypop 0.28s ease-out; }
+.woodrow { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; font-weight: 700; margin-top: 3px; }
+.woodrow .bank { color: #e0aa6a; }
+.carrywrap { display: inline-flex; align-items: center; gap: 7px; transform-origin: right center; }
+.carrywrap > em { font-size: 11px; font-style: normal; letter-spacing: 1px; color: var(--ash); }
+.pips { display: inline-flex; gap: 3px; }
+.pip { width: 10px; height: 13px; border-radius: 2px; border: 1.5px solid rgba(201,138,74,0.55); background: transparent; }
+.pip.on { background: linear-gradient(180deg, #e0a866, #b5793f); border-color: #e0a866; box-shadow: 0 0 5px rgba(224,168,102,0.5); }
+.carrywrap.full .pip.on { background: linear-gradient(180deg, #ffe08a, #ff9d3a); border-color: #ffe08a; box-shadow: 0 0 7px rgba(255,190,90,0.8); }
+.carrywrap.full > em { color: var(--ember-hot); }
+@keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.carrywrap.pop { animation: carrypop 0.26s ease-out; }
 
 /* ---- active ability buffs ---- */
 #buffs { position: absolute; top: 128px; left: 14px; right: 14px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
@@ -163,7 +169,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10
+  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 66
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -239,6 +245,17 @@ var boundR = wr(ARENA);
 var boundary = new THREE.Mesh(new THREE.RingGeometry(boundR - 0.06, boundR + 0.06, 72),
   new THREE.MeshBasicMaterial({ color: 0x6a5a8a, transparent: true, opacity: 0.14, side: THREE.DoubleSide }));
 boundary.rotation.x = -Math.PI / 2; boundary.position.y = 0.02; scene.add(boundary);
+
+// fire strength/range ring: sits at the fire's effective edge, grows + brightens
+// with fuel so the protected zone (warmth + burn) is always legible
+var rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1.0, 64),
+  new THREE.MeshBasicMaterial({ color: 0xff8a2b, transparent: true, opacity: 0.3, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.04; scene.add(rangeRing);
+
+// bank drop-zone ring: where you deposit carried wood
+var bankRing = new THREE.Mesh(new THREE.RingGeometry(wr(CFG.bankRadius) - 0.05, wr(CFG.bankRadius) + 0.05, 48),
+  new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.3, side: THREE.DoubleSide }));
+bankRing.rotation.x = -Math.PI / 2; bankRing.position.y = 0.05; scene.add(bankRing);
 
 // low-fuel warning ring on the ground
 var warnRing = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.45, 32),
@@ -708,8 +725,9 @@ function update(dt) {
     survivor.chopT = 0; survivor.prevPhase = 0;
     if (near) game.packFull = true;   // standing at a tree but the pack is full
   }
-  if (litByFire && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(fireRadius() * 0.5, 2)) {
-    if (game.carry > 0) { game.bank += game.carry; game.carry = 0; addParticles(CFG.fireX, CFG.fireY, 6, '#ffd24a', 70, 0.4, 3); UI.syncDock(); }
+  // bank wood by stepping into the fixed drop-zone ring around the fire
+  if (dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
+    if (game.carry > 0) { game.bank += game.carry; game.carry = 0; addParticles(CFG.fireX, CFG.fireY, 8, '#ffd24a', 80, 0.45, 3); Audio2.wood(); UI.syncDock(); }
   }
   if (trees.length < 5 && Math.random() < dt * 0.8) spawnTree();
 
@@ -809,6 +827,17 @@ function renderScene(dt) {
   // the whole world darkens as the fire fails (with a readable floor)
   ambient.intensity = 0.24 + it * 0.34;
   moonLight.intensity = 0.28 + it * 0.14;
+
+  // fire range ring: radius tracks the fire's reach; colour dim-red (weak) -> gold (strong)
+  var rr = wr(fireRadius());
+  rangeRing.scale.set(rr, rr, rr);
+  rangeRing.material.color.setRGB(lerp(0.75, 1.0, it), lerp(0.16, 0.82, it), lerp(0.08, 0.3, it));
+  rangeRing.material.opacity = 0.16 + it * 0.4;
+
+  // bank drop-zone ring: pulses brighter while you're carrying wood to deposit
+  var carrying = game.carry > 0;
+  bankRing.material.opacity = carrying ? 0.45 + 0.35 * Math.abs(Math.sin(t * 5)) : 0.2;
+  bankRing.material.color.setHex(carrying ? 0xffe08a : 0xffd24a);
   var fs = 0.32 + it * 1.05;
   flameOuter.scale.set(fs, fs * flick, fs); flameOuter.position.y = 0.18 + fs * 0.72;
   flameMid.scale.set(fs, fs * 1.1 * flick, fs); flameMid.position.y = 0.18 + fs * 0.56;
@@ -981,13 +1010,13 @@ var UI = (function () {
     '<div class="phasebar"><i></i></div>' +
     '<div class="meter fire"><i></i><span class="lbl">🔥 FIRE</span><span class="val"></span></div>' +
     '<div class="meter warmth"><i></i><span class="lbl">❄ WARMTH</span><span class="val"></span></div>' +
-    '<div class="woodrow"><span class="bank"></span><span class="carry"></span></div>';
+    '<div class="woodrow"><span class="bank"></span><span class="carrywrap"><em>PACK</em><span class="pips"></span></span></div>';
   stage.appendChild(hud);
   var q = function (s) { return hud.querySelector(s); };
   var elNight = q('.night'), elPhase = q('.phase'), elPhaseBar = q('.phasebar'), elPhaseFill = q('.phasebar > i');
   var elFire = q('.meter.fire > i'), elFireVal = q('.meter.fire .val');
   var elWarm = q('.meter.warmth > i'), elWarmVal = q('.meter.warmth .val');
-  var elBank = q('.woodrow .bank'), elCarry = q('.woodrow .carry');
+  var elBank = q('.woodrow .bank'), elCarryWrap = q('.woodrow .carrywrap'), elPips = q('.woodrow .pips');
 
   var buffbar = el('div'); buffbar.id = 'buffs'; stage.appendChild(buffbar);
 
@@ -1060,7 +1089,7 @@ var UI = (function () {
     });
   }
   function flashBtn(id) { var b = id === 'feed' ? feedBtn : upBtns[id]; if (!b) return; b.classList.add('flash'); setTimeout(function () { b.classList.remove('flash'); }, 120); }
-  function flashCarry() { elCarry.classList.remove('pop'); void elCarry.offsetWidth; elCarry.classList.add('pop'); }
+  function flashCarry() { elCarryWrap.classList.remove('pop'); void elCarryWrap.offsetWidth; elCarryWrap.classList.add('pop'); }
 
   function updateHUD() {
     if (game.state !== 'play') return;
@@ -1077,8 +1106,14 @@ var UI = (function () {
     elWarmVal.textContent = Math.round(game.warmth);
     elBank.textContent = '🪵 BANK ' + game.bank;
     var cap = carryCap();
-    elCarry.textContent = 'CARRYING ' + game.carry + ' / ' + cap;
-    elCarry.className = 'carry' + (game.carry >= cap ? ' full' : '');
+    var pipKey = game.carry + '/' + cap;
+    if (elPips._key !== pipKey) {
+      elPips._key = pipKey;
+      var ph = '';
+      for (var pi = 0; pi < cap; pi++) ph += '<i class="pip' + (pi < game.carry ? ' on' : '') + '"></i>';
+      elPips.innerHTML = ph;
+      elCarryWrap.classList.toggle('full', game.carry >= cap);
+    }
 
     // banner
     if (game.banner) { var b = game.banner, k = b.t / b.max, a = clamp(k < 0.25 ? k / 0.25 : (k > 0.85 ? (1 - k) / 0.15 : 1), 0, 1); banner.style.opacity = a; bMain.textContent = b.main; bMain.style.color = isNight ? '#ff9d6a' : '#ffe08a'; bSub.textContent = b.sub; }
