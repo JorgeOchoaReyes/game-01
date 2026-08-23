@@ -78,6 +78,19 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
 9. **3D readability fix.** Shades first read as dark rocks, so I made them
    self-glowing purple wraiths with a soft halo and bright eyes — threats now read
    at a glance even outside the firelight.
+10. **Feel + clarity pass (from playtests).** Smooth eased turning, a walk cycle,
+    and an overhead chop/attack swing; harvestable pines wear a ground ring and a
+    progress bar and visibly shrink as they're felled; the fire's *light* now
+    scales hard with fuel (a dying fire throws a small, dark pool); enemies glow
+    orange and show HP bars as the fire burns them; a "pack full" nudge explains
+    the gather dead-zone.
+11. **Depth pass (progression + difficulty).** Ability drops — shades drop (and
+    each dawn grants) glowing pickups: Inferno (fire burns 2× and wider), Swift
+    (move faster), Ward (immune to cold), Harvest (chop twice as fast, bonus logs),
+    and Nova (instant screen-clearing blast), shown as timed HUD chips. A tanky
+    Brute shade from night 3+, steeper per-night escalation, critical chops for
+    bonus wood, and solid tree collision (no walking through trunks). Re-balanced:
+    sensible 5/5, careless 5/5 on the razor's edge, reckless ~3/5.
 
 ## Balancing with a bot
 

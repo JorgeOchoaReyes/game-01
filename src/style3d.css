@@ -53,6 +53,14 @@ html, body {
 @keyframes carrypop { 0% { transform: scale(1); } 35% { transform: scale(1.28); color: #ffe08a; } 100% { transform: scale(1); } }
 .woodrow .carry.pop { animation: carrypop 0.28s ease-out; }
 
+/* ---- active ability buffs ---- */
+#buffs { position: absolute; top: 128px; left: 14px; right: 14px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.buff { position: relative; display: flex; align-items: center; gap: 5px; padding: 4px 9px 6px; border: 1px solid #fff;
+  border-radius: 9px; background: rgba(14, 9, 18, 0.82); overflow: hidden; }
+.buff > span { font-size: 15px; }
+.buff > em { font-size: 11px; font-weight: 700; font-style: normal; letter-spacing: 0.3px; color: #f3e9df; }
+.buff > i { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; transform-origin: left; }
+
 /* ---- banner + warning ---- */
 #banner { position: absolute; top: 30%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
 #banner .main { font-size: 40px; font-weight: 800; letter-spacing: 1px; text-shadow: 0 2px 12px rgba(0,0,0,0.85); }

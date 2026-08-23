@@ -36,12 +36,14 @@ number, so the classic "gather vs. defend" tension is constant and immediate.
 
 ## Progression within one session
 
-A full run is five escalating nights (~3–4 minutes). Each night raises shade
-count, speed, toughness, and fuel decay. Four upgrade tracks — Stoke (radius),
-Ashheart (burn), Satchel (carry), Coat (warmth cost) — let the player shape a
-build across the run. Win by surviving to dawn on Night 5; lose if the fire dies or
-you freeze. Bot-tested balance: sensible play usually wins with the final night a
-genuine threat, while neglect loses around Night 3–4.
+A full run is five escalating nights (~3–4 minutes). Each night raises shade count,
+speed, and fuel decay, and from night three a tanky Brute joins the swarm.
+Progression runs on two layers: four permanent upgrade tracks bought with wood —
+Stoke (radius), Ashheart (burn), Satchel (carry), Coat (warmth) — and ability drops
+that fall from shades and each dawn: Inferno, Swift, Ward, Harvest, and a
+screen-clearing Nova, each a timed power. Win by surviving to dawn on Night 5; lose
+if the fire dies or you freeze. Bot-tested: sensible play wins with warmth on a
+knife-edge; neglect loses.
 
 ## Controls & readability
 
