@@ -103,6 +103,15 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     burst; a full pack auto-dumps from a generous range with wood arcing into the
     fire and a flare-up. Submission-checked: readable single index.html, Three.js
     in vendor/, zero external requests, portrait, single-player.
+14. **Active defense.** The torch swing that chops wood now also bashes shades
+    back (burn + knockback) when no tree is in reach — nights become an active
+    gather-vs-defend choice, not passive fire-tending.
+15. **Fixes + economy rework (from playtests).** Fixed a black-screen-on-replay
+    bug (the loss darkening wasn't reset for a fresh game, which also hid the
+    trees). Then reworked the economy so it reads intuitively: wood **feeds the
+    fire directly** on dump (no more hidden bank + FEED button), and **upgrades
+    cost the fire's own fuel** — a real sacrifice. Re-tuned: sensible 5/5,
+    careless 5/5, reckless ~1/5.
 
 ## Balancing with a bot
 
