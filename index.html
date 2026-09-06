@@ -797,49 +797,66 @@ function update(dt) {
   targetTree = near;
   survivor.chopping = false;
   game.packFull = false;
-  if (near && game.carry < carryCap()) {
+
+  // nearest shade within torch reach — the same swing that chops wood beats these back
+  var meleeShade = null, meleeD = 1e9;
+  for (var mi = 0; mi < shades.length; mi++) {
+    var msd = dist2(survivor.x, survivor.y, shades[mi].x, shades[mi].y), mrr = shades[mi].r + survivor.r + 16;
+    if (msd < mrr * mrr && msd < meleeD) { meleeShade = shades[mi]; meleeD = msd; }
+  }
+  var choppingTree = near && game.carry < carryCap();
+  var bashing = !choppingTree && meleeShade;          // gathering wood takes priority over swinging
+  if (near && !choppingTree) game.packFull = true;    // at a tree but the pack is full
+
+  if (choppingTree || bashing) {
     survivor.chopping = true;
-    if (!survivor.moving) survivor.face = Math.atan2(near.y - survivor.y, near.x - survivor.x); // turn to face the tree
-    // advance the axe swing and land an impact on every downstroke (so no swing feels dead)
+    var faceT = choppingTree ? near : meleeShade;
+    if (!survivor.moving) survivor.face = Math.atan2(faceT.y - survivor.y, faceT.x - survivor.x);
     survivor.chopT += dt;
     var phase = (survivor.chopT * 3.2) % 1;
-    if (survivor.prevPhase < 0.5 && phase >= 0.5) {
-      near.hit = 0.18;
-      addParticles(near.x, near.y, 6, '#d8a468', 100, 0.4, 2);     // chips fly on each strike
-      Audio2.chop();
-    }
+    var downstroke = survivor.prevPhase < 0.5 && phase >= 0.5;
     survivor.prevPhase = phase;
-    // wood accumulates toward the next log
-    near.chop += dt;
-    if (near.chop >= gatherTime()) {
-      near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
-      near.hit = 0.24;
-      addParticles(near.x, near.y, 12, '#c98a4a', 145, 0.55, 3);   // bigger burst on a log gained
-      // critical chop: a lucky strike splits off a bonus log
-      if (Math.random() < 0.2 && near.wood > 0 && game.carry < carryCap()) {
-        near.wood--; game.carry++; game.woodPopped++;
-        addParticles(near.x, near.y, 14, '#ffe08a', 175, 0.6, 3);
-        Audio2.crit();
-      } else Audio2.wood();
-      // Harvest buff: an extra log on top
-      if (buffOn('harvest') && near.wood > 0 && game.carry < carryCap()) {
-        near.wood--; game.carry++; game.woodPopped++;
-        addParticles(near.x, near.y, 8, '#ffd24a', 120, 0.5, 2);
+
+    if (choppingTree) {
+      if (downstroke) { near.hit = 0.18; addParticles(near.x, near.y, 6, '#d8a468', 100, 0.4, 2); Audio2.chop(); }
+      near.chop += dt;
+      if (near.chop >= gatherTime()) {
+        near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
+        near.hit = 0.24;
+        addParticles(near.x, near.y, 12, '#c98a4a', 145, 0.55, 3);
+        if (Math.random() < 0.2 && near.wood > 0 && game.carry < carryCap()) {
+          near.wood--; game.carry++; game.woodPopped++;
+          addParticles(near.x, near.y, 14, '#ffe08a', 175, 0.6, 3); Audio2.crit();
+        } else Audio2.wood();
+        if (buffOn('harvest') && near.wood > 0 && game.carry < carryCap()) {
+          near.wood--; game.carry++; game.woodPopped++;
+          addParticles(near.x, near.y, 8, '#ffd24a', 120, 0.5, 2);
+        }
+        UI.flashCarry();
+        if (near.wood <= 0) {
+          near.felling = 0.55;
+          addParticles(near.x, near.y, 26, '#6a9a55', 175, 0.75, 3);
+          addParticles(near.x, near.y, 10, '#ffe08a', 150, 0.6, 3);
+          game.shake = Math.max(game.shake, 4); Audio2.fell();
+        }
+        UI.syncDock();
       }
-      UI.flashCarry();
-      if (near.wood <= 0) {
-        near.felling = 0.55;                                       // topple animation, then removed
-        addParticles(near.x, near.y, 26, '#6a9a55', 175, 0.75, 3); // felled burst
-        addParticles(near.x, near.y, 10, '#ffe08a', 150, 0.6, 3);  // reward sparkle
-        game.shake = Math.max(game.shake, 4);
-        Audio2.fell();
-        // regrow is handled by the deterministic top-up below (survives restarts)
+    } else if (downstroke) {
+      // TORCH BASH: knock back and burn every shade in reach (active defense of the fire)
+      var bashDmg = 4 + UPGRADES.ashheart.lvl * 2 + (buffOn('inferno') ? 4 : 0);
+      for (var bi = 0; bi < shades.length; bi++) {
+        var bs = shades[bi], bdd = Math.hypot(bs.x - survivor.x, bs.y - survivor.y);
+        if (bdd < bs.r + survivor.r + 24) {
+          bs.hp -= bashDmg; bs.hitFlash = 0.15;
+          var kx = (bs.x - survivor.x) / (bdd || 1), ky = (bs.y - survivor.y) / (bdd || 1);
+          bs.x += kx * 48; bs.y += ky * 48;
+        }
       }
-      UI.syncDock();
+      addParticles(survivor.x + Math.cos(survivor.face) * 16, survivor.y + Math.sin(survivor.face) * 16, 9, '#ff9d3a', 130, 0.45, 3);
+      game.shake = Math.max(game.shake, 3); Audio2.chop(); Audio2.sizzle();
     }
   } else {
     survivor.chopT = 0; survivor.prevPhase = 0;
-    if (near) game.packFull = true;   // standing at a tree but the pack is full
   }
   // auto-dump: step into the generous drop-zone ring and your wood flies to the fire
   if (game.carry > 0 && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
@@ -1257,7 +1274,7 @@ var UI = (function () {
     legend.appendChild(legendRow('#4f9a56', 'Pines — walk into them to gather wood'));
     legend.appendChild(legendRow('#8f79ff', 'Shades — drain the fire at night'));
     legend.appendChild(legendRow('#ffd24a', 'Glowing drops — grab them for powers'));
-    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Bank wood at the fire, then FEED it or buy upgrades. Grab glowing drops for abilities. Survive 5 nights.');
+    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood; return to the fire to bank it, then FEED it or buy upgrades. Swing your torch at shades to beat them back. Grab glowing drops for powers. Survive 5 nights.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
     var best = loadBest();
     var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;
