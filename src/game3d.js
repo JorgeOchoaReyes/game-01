@@ -830,6 +830,12 @@ function renderScene(dt) {
     scene.background.setRGB(lerp(0.024, 0, osr), lerp(0.016, 0, osr), lerp(0.047, 0.004, osr));
     scene.fog.density = lerp(0.05, 0.16, osr);
     fireLight.intensity = lerp(2.4, 0, osr); fireLight.distance = lerp(6, 1, osr);
+  } else {
+    // playing / title / level-up: restore the normal night mood every frame,
+    // so a previous win/loss animation can never leave the scene stuck dark/bright
+    scene.fog.density = 0.05;
+    scene.background.setRGB(0.024, 0.016, 0.047);
+    ambient.color.setRGB(0.22, 0.25, 0.41);
   }
 
   // fire range ring: radius tracks the fire's reach; colour dim-red (weak) -> gold (strong)
