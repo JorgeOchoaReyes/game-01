@@ -44,8 +44,9 @@ const server = http.createServer((req, res) => {
       const G = E.game;
       let minFuel = 100, minWarmth = 100, feeds = 0, buys = 0, guard = 0;
       const dt = 1 / 30;
-      while (G.state === 'play' && guard < 30000) {
+      while ((G.state === 'play' || G.state === 'levelup') && guard < 30000) {
         guard++;
+        if (G.state === 'levelup') { E.pick(Math.floor(Math.random() * 3)); continue; }
         const cap = E.carryCap();
         // reckless play sometimes just forgets to feed
         const skip = policy.skipFeed && Math.random() < policy.skipFeed;

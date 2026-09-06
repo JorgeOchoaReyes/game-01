@@ -117,3 +117,32 @@ html, body {
 .legend .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #d9cdbf; }
 .legend .dot { width: 15px; height: 15px; border-radius: 4px; flex: 0 0 auto; }
 .credit { position: absolute; bottom: 12px; font-size: 11px; color: #6b5f55; }
+
+/* ---- win / lose / level-up moods ---- */
+@keyframes screenfade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes losefade { 0% { opacity: 0; } 30% { opacity: 0.55; } 100% { opacity: 1; } }
+@keyframes winpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+.screen.win { background: radial-gradient(circle at 50% 38%, rgba(255,190,90,0.14), rgba(24,12,4,0.5) 74%); animation: screenfade 0.5s ease-out; }
+.screen.win h2 { color: #ffe08a; text-shadow: 0 0 34px rgba(255,205,95,0.85); animation: winpulse 1.2s ease-in-out infinite; }
+.screen.lose { background: radial-gradient(circle at 50% 46%, rgba(24,8,10,0.55), rgba(0,0,0,0.98) 68%); animation: losefade 1.6s ease-in forwards; }
+.screen.lose h2 { color: #ff5f5f; text-shadow: 0 0 20px rgba(120,0,0,0.6); letter-spacing: 1px; }
+.screen.lose p, .screen.lose .stat { color: #8a7d75; }
+.screen.levelup { background: radial-gradient(circle at 50% 38%, rgba(60,44,14,0.55), rgba(6,4,10,0.92) 76%); animation: screenfade 0.35s ease-out; }
+
+.score { font-size: 32px; font-weight: 800; color: #ffd24a; text-shadow: 0 0 18px rgba(255,200,80,0.6); font-variant-numeric: tabular-nums; }
+.newbest { font-size: 17px; font-weight: 800; color: #2a1400; background: linear-gradient(90deg, #ff8a2b, #ffe08a); padding: 6px 18px; border-radius: 22px; box-shadow: 0 0 24px rgba(255,200,80,0.75); animation: winpulse 0.7s ease-in-out infinite; }
+
+.boons { display: flex; gap: 9px; margin-top: 8px; width: 100%; max-width: 350px; }
+.boon { pointer-events: auto; flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 15px 7px; border: 1px solid var(--panel-edge); border-radius: 14px; background: var(--panel); color: #f3e9df;
+  transition: transform 0.08s ease, border-color 0.1s, background 0.1s; }
+.boon:active { transform: scale(0.95); }
+.boon:hover { border-color: #ffb04a; background: rgba(40,26,14,0.9); }
+.boon .bi { font-size: 30px; }
+.boon .bn { font-size: 14px; font-weight: 800; color: #ffe0a0; }
+.boon .bd { font-size: 11px; color: var(--ash); line-height: 1.25; }
+
+.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti i { position: absolute; top: -22px; width: 9px; height: 15px; border-radius: 2px; animation: conffall linear forwards; }
+@keyframes conffall { 0% { transform: translateY(-22px) rotate(0); opacity: 1; } 100% { transform: translateY(1000px) rotate(760deg); opacity: 0.85; } }

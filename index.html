@@ -127,6 +127,35 @@ html, body {
 .legend .dot { width: 15px; height: 15px; border-radius: 4px; flex: 0 0 auto; }
 .credit { position: absolute; bottom: 12px; font-size: 11px; color: #6b5f55; }
 
+/* ---- win / lose / level-up moods ---- */
+@keyframes screenfade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes losefade { 0% { opacity: 0; } 30% { opacity: 0.55; } 100% { opacity: 1; } }
+@keyframes winpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+.screen.win { background: radial-gradient(circle at 50% 38%, rgba(255,190,90,0.14), rgba(24,12,4,0.5) 74%); animation: screenfade 0.5s ease-out; }
+.screen.win h2 { color: #ffe08a; text-shadow: 0 0 34px rgba(255,205,95,0.85); animation: winpulse 1.2s ease-in-out infinite; }
+.screen.lose { background: radial-gradient(circle at 50% 46%, rgba(24,8,10,0.55), rgba(0,0,0,0.98) 68%); animation: losefade 1.6s ease-in forwards; }
+.screen.lose h2 { color: #ff5f5f; text-shadow: 0 0 20px rgba(120,0,0,0.6); letter-spacing: 1px; }
+.screen.lose p, .screen.lose .stat { color: #8a7d75; }
+.screen.levelup { background: radial-gradient(circle at 50% 38%, rgba(60,44,14,0.55), rgba(6,4,10,0.92) 76%); animation: screenfade 0.35s ease-out; }
+
+.score { font-size: 32px; font-weight: 800; color: #ffd24a; text-shadow: 0 0 18px rgba(255,200,80,0.6); font-variant-numeric: tabular-nums; }
+.newbest { font-size: 17px; font-weight: 800; color: #2a1400; background: linear-gradient(90deg, #ff8a2b, #ffe08a); padding: 6px 18px; border-radius: 22px; box-shadow: 0 0 24px rgba(255,200,80,0.75); animation: winpulse 0.7s ease-in-out infinite; }
+
+.boons { display: flex; gap: 9px; margin-top: 8px; width: 100%; max-width: 350px; }
+.boon { pointer-events: auto; flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 15px 7px; border: 1px solid var(--panel-edge); border-radius: 14px; background: var(--panel); color: #f3e9df;
+  transition: transform 0.08s ease, border-color 0.1s, background 0.1s; }
+.boon:active { transform: scale(0.95); }
+.boon:hover { border-color: #ffb04a; background: rgba(40,26,14,0.9); }
+.boon .bi { font-size: 30px; }
+.boon .bn { font-size: 14px; font-weight: 800; color: #ffe0a0; }
+.boon .bd { font-size: 11px; color: var(--ash); line-height: 1.25; }
+
+.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti i { position: absolute; top: -22px; width: 9px; height: 15px; border-radius: 2px; animation: conffall linear forwards; }
+@keyframes conffall { 0% { transform: translateY(-22px) rotate(0); opacity: 1; } 100% { transform: translateY(1000px) rotate(760deg); opacity: 0.85; } }
+
 </style>
 </head>
 <body>
@@ -526,20 +555,39 @@ function buffOn(k) { return game.buffs[k] > 0; }
 var game = {
   state: 'title', time: 0, fuel: 65, warmth: 100, bank: 0, carry: 0,
   night: 1, phase: 'dawn', phaseTime: CFG.dawnLen, woodPopped: 0, shadesBurned: 0,
-  shake: 0, lowFuelWarn: 0, flash: 0, banner: null, tipShown: false, buffs: {}, packFull: false
+  shake: 0, lowFuelWarn: 0, flash: 0, banner: null, tipShown: false, buffs: {}, packFull: false,
+  mods: {}, endT: 0, lastScore: 0, bestScore: 0, isBest: false, boons: []
 };
+
+// permanent run boons picked between nights (the "level up" beat)
+var BOONS = [
+  { icon: '🔥', name: 'Hotter Coals', desc: 'Fire burns +35%', apply: function () { game.mods.burn = (game.mods.burn || 0) + 0.35; } },
+  { icon: '🌟', name: 'Wider Light', desc: 'Fire reaches +15%', apply: function () { game.mods.radius = (game.mods.radius || 0) + 0.15; } },
+  { icon: '🎒', name: 'Deep Pack', desc: 'Carry +3 wood', apply: function () { game.mods.carry = (game.mods.carry || 0) + 3; } },
+  { icon: '🧥', name: 'Thick Coat', desc: 'Cold −25%', apply: function () { game.mods.cold = (game.mods.cold || 1) * 0.75; } },
+  { icon: '💨', name: 'Fleet Foot', desc: 'Move +14%', apply: function () { game.mods.speed = (game.mods.speed || 0) + 0.14; } },
+  { icon: '🪓', name: 'Keen Axe', desc: 'Chop 25% faster', apply: function () { game.mods.chop = (game.mods.chop || 1) * 0.75; } },
+  { icon: '✨', name: 'Lucky Finds', desc: 'More ability drops', apply: function () { game.mods.drop = (game.mods.drop || 0) + 0.12; } }
+];
+
+function loadBest() { try { return parseInt(localStorage.getItem('ember_best') || '0', 10) || 0; } catch (e) { return 0; } }
+function saveBest(v) { try { localStorage.setItem('ember_best', String(v)); } catch (e) {} }
+function computeScore() {
+  var nights = game.state === 'win' ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
+  return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (game.state === 'win' ? 1000 : 0));
+}
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0, prevPhase: 0 };
 var trees = [], shades = [], particles = [], flares = [], drops = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
-function fireRadius() { return (78 + (game.fuel / CFG.fuelMax) * 120 + UPGRADES.stoke.lvl * 14) * (buffOn('inferno') ? 1.22 : 1); }
+function fireRadius() { return (78 + (game.fuel / CFG.fuelMax) * 120 + UPGRADES.stoke.lvl * 14) * (1 + (game.mods.radius || 0)) * (buffOn('inferno') ? 1.22 : 1); }
 function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
-function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3; }
-function burnDps() { return (34 + UPGRADES.ashheart.lvl * 12) * (buffOn('inferno') ? 2 : 1); }
-function moveSpeed() { return CFG.survivorSpeed * (buffOn('swift') ? 1.6 : 1); }
-function gatherTime() { return CFG.gatherTime * (buffOn('harvest') ? 0.5 : 1); }
+function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3 + (game.mods.carry || 0); }
+function burnDps() { return (34 + UPGRADES.ashheart.lvl * 12) * (1 + (game.mods.burn || 0)) * (buffOn('inferno') ? 2 : 1); }
+function moveSpeed() { return CFG.survivorSpeed * (1 + (game.mods.speed || 0)) * (buffOn('swift') ? 1.6 : 1); }
+function gatherTime() { return CFG.gatherTime * (game.mods.chop || 1) * (buffOn('harvest') ? 0.5 : 1); }
 
 function spawnTree() {
   // always inside the reachable arena, not on the bank zone, not overlapping another tree
@@ -606,13 +654,43 @@ function startGame() {
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
-  game.buffs = {}; game.treeTimer = 0;
+  game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
   for (var i = 0; i < 6; i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
 }
-function endGame(win) { game.state = win ? 'win' : 'over'; if (win) Audio2.win(); else Audio2.lose(); UI.showResult(win); }
+function endGame(win) {
+  game.state = win ? 'win' : 'over';
+  game.endT = 0;
+  game.lastScore = computeScore();
+  var best = loadBest();
+  game.isBest = game.lastScore > best;
+  game.bestScore = game.isBest ? game.lastScore : best;
+  if (game.isBest) saveBest(game.lastScore);
+  shades.length = 0; drops.length = 0;                 // clear the stage for the end scene
+  if (win) { game.fuel = CFG.fuelMax; game.buffs = {}; }  // a roaring victory fire
+  if (win) Audio2.win(); else Audio2.lose();
+  UI.showResult(win);
+}
+
+// present the between-nights boon pick (the "level up" beat)
+function startLevelUp() {
+  var pool = BOONS.slice();
+  game.boons = [];
+  for (var i = 0; i < 3 && pool.length; i++) game.boons.push(pool.splice(Math.floor(rand(0, pool.length)), 1)[0]);
+  game.state = 'levelup';
+  Audio2.dawn();
+  UI.showLevelUp();
+}
+function pickBoon(idx) {
+  var b = game.boons[idx];
+  if (b) { b.apply(); Audio2.upgrade(); addParticles(survivor.x, survivor.y, 20, '#8affc1', 130, 0.7, 3); }
+  game.state = 'play';
+  spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType());
+  setBanner('DAWN', 'Night ' + (game.night - 1) + ' survived — stock up', 2.6);
+  UI.showScreen(null); UI.syncDock();
+}
 function feedFire() {
   if (game.state !== 'play' || game.bank < CFG.feedCost) return;
   game.bank -= CFG.feedCost;
@@ -635,7 +713,11 @@ function buyUpgrade(key) {
 }
 
 function update(dt) {
-  if (game.state !== 'play') { updateParticles(dt); return; }
+  if (game.state !== 'play') {
+    if (game.state === 'win' || game.state === 'over') game.endT += dt;
+    updateParticles(dt);
+    return;
+  }
   game.time += dt;
   game.phaseTime -= dt;
   if (game.phase === 'dawn') {
@@ -652,9 +734,9 @@ function update(dt) {
     if (game.phaseTime <= 0) {
       if (game.night >= CFG.nights) { endGame(true); return; }
       game.night++; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
-      shades.length = 0; addParticles(CFG.fireX, CFG.fireY, 30, '#ffd24a', 160, 0.9, 4);
-      spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType()); // reward for surviving
-      setBanner('DAWN', 'Night ' + (game.night - 1) + ' survived — grab the drop & stock up', 2.8); Audio2.dawn();
+      shades.length = 0; addParticles(CFG.fireX, CFG.fireY, 34, '#ffd24a', 170, 0.9, 4);
+      startLevelUp();   // pause for a boon pick, then resume dawn
+      return;
     }
   }
   var decay = 1.2 + game.night * 0.34 + (game.phase === 'night' ? 1.5 : 0);
@@ -689,7 +771,7 @@ function update(dt) {
   var warmthRate;
   if (litByFire) warmthRate = 22;
   else if (buffOn('ward')) warmthRate = 0;   // Ward: immune to the cold
-  else { var coldBase = 7 + game.night * 0.9 + (game.phase === 'night' ? 3 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12); }
+  else { var coldBase = 7 + game.night * 0.9 + (game.phase === 'night' ? 3 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
   survivor.chill = 1 - game.warmth / CFG.warmthMax;
   if (game.warmth <= 0) { endGame(false); return; }
@@ -781,7 +863,7 @@ function update(dt) {
       addParticles(s.x, s.y, 9, '#ff9d3a', 150, 0.45, 3);   // + fire flash
       Audio2.shadeDie();
       // ability drops: brutes always drop, shades occasionally
-      if (Math.random() < (s.kind === 'brute' ? 1 : 0.1)) spawnDrop(s.x, s.y, randomDropType());
+      if (Math.random() < (s.kind === 'brute' ? 1 : 0.1 + (game.mods.drop || 0))) spawnDrop(s.x, s.y, randomDropType());
     }
   }
   if (anyBurning && Math.random() < dt * 5) Audio2.sizzle();
@@ -852,6 +934,23 @@ function renderScene(dt) {
   ambient.intensity = 0.24 + it * 0.34;
   moonLight.intensity = 0.28 + it * 0.14;
 
+  // end-of-round mood: sunrise on a win, the dark swallowing everything on a loss
+  if (game.state === 'win') {
+    var wsr = clamp(game.endT / 2.6, 0, 1);
+    ambient.intensity = 0.5 + wsr * 1.2;
+    ambient.color.setRGB(lerp(0.22, 1.0, wsr), lerp(0.25, 0.86, wsr), lerp(0.41, 0.66, wsr));
+    scene.background.setRGB(lerp(0.024, 0.55, wsr), lerp(0.016, 0.34, wsr), lerp(0.047, 0.26, wsr));
+    scene.fog.density = lerp(0.05, 0.01, wsr);
+    fireLight.intensity = 7 + wsr * 3; fireLight.distance = 13 + wsr * 5;
+  } else if (game.state === 'over') {
+    var osr = clamp(game.endT / 2.6, 0, 1);
+    ambient.intensity = lerp(0.42, 0.015, osr);
+    ambient.color.setRGB(lerp(0.22, 0.05, osr), lerp(0.25, 0.07, osr), lerp(0.41, 0.14, osr));
+    scene.background.setRGB(lerp(0.024, 0, osr), lerp(0.016, 0, osr), lerp(0.047, 0.004, osr));
+    scene.fog.density = lerp(0.05, 0.16, osr);
+    fireLight.intensity = lerp(2.4, 0, osr); fireLight.distance = lerp(6, 1, osr);
+  }
+
   // fire range ring: radius tracks the fire's reach; colour dim-red (weak) -> gold (strong)
   var rr = wr(fireRadius());
   rangeRing.scale.set(rr, rr, rr);
@@ -862,12 +961,17 @@ function renderScene(dt) {
   var carrying = game.carry > 0;
   bankRing.material.opacity = carrying ? 0.45 + 0.35 * Math.abs(Math.sin(t * 5)) : 0.2;
   bankRing.material.color.setHex(carrying ? 0xffe08a : 0xffd24a);
+  var playing = game.state === 'play';
+  rangeRing.visible = playing; bankRing.visible = playing;   // gameplay guides only while playing
   var fs = 0.32 + it * 1.05;
+  if (game.state === 'over') fs *= (1 - clamp(game.endT / 2.0, 0, 1));   // fire guttering out on a loss
+  else if (game.state === 'win') fs *= 1.15;                              // roaring on a win
   flameOuter.scale.set(fs, fs * flick, fs); flameOuter.position.y = 0.18 + fs * 0.72;
   flameMid.scale.set(fs, fs * 1.1 * flick, fs); flameMid.position.y = 0.18 + fs * 0.56;
   flameCore.scale.set(fs, fs * 1.2 * flick, fs); flameCore.position.y = 0.18 + fs * 0.42;
-  flameCore.visible = it > 0.35;
-  coals.material.opacity = 0.45 + it * 0.5; var cs = 0.6 + it * 0.5; coals.scale.set(cs, cs, cs);
+  flameCore.visible = it > 0.35 || game.state === 'win';
+  coals.material.opacity = (0.45 + it * 0.5) * (game.state === 'over' ? (1 - clamp(game.endT / 2.5, 0, 1)) : 1);
+  var cs = 0.6 + it * 0.5; coals.scale.set(cs, cs, cs);
 
   // fire embers
   for (var e = 0; e < EMB; e++) {
@@ -1079,10 +1183,13 @@ var UI = (function () {
   // screen overlay
   var screen = el('div', 'screen hidden'); stage.appendChild(screen);
 
-  function showScreen(nodes) {
+  function showScreen(nodes, cls) {
+    screen.className = 'screen' + (cls ? ' ' + cls : '');
     if (!nodes) { screen.classList.add('hidden'); screen.innerHTML = ''; dock.style.display = 'flex'; hud.style.display = 'block'; return; }
-    screen.classList.remove('hidden'); screen.innerHTML = ''; nodes.forEach(function (n) { screen.appendChild(n); });
+    screen.innerHTML = ''; nodes.forEach(function (n) { screen.appendChild(n); });
     dock.style.display = 'none'; hud.style.display = 'none';
+    // hide transient in-world overlays so they don't ghost behind the menu
+    banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = '';
   }
   function legendRow(color, text) { var r = el('div', 'row'); var d = el('span', 'dot'); d.style.background = color; r.appendChild(d); r.appendChild(el('span', null, text)); return r; }
   function showTitle() {
@@ -1096,21 +1203,48 @@ var UI = (function () {
     legend.appendChild(legendRow('#ffd24a', 'Glowing drops — grab them for powers'));
     var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Bank wood at the fire, then FEED it or buy upgrades. Grab glowing drops for abilities. Survive 5 nights.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
+    var best = loadBest();
+    var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;
     var credit = el('div', 'credit', 'A survival prototype · portrait · offline · 3D');
-    showScreen([h, p, legend, how, btn, credit]);
+    var nodes = [h, p, legend, how, btn];
+    if (bestEl) nodes.push(bestEl);
+    nodes.push(credit);
+    showScreen(nodes);
   }
+
+  // between-nights level up: pick one of three permanent boons
+  function showLevelUp() {
+    var h = el('h2', null, '☀ NIGHT ' + (game.night - 1) + ' SURVIVED'); h.style.color = '#ffe08a';
+    var p = el('p', null, 'Dawn breaks. Choose a boon to carry into the coming nights:');
+    var row = el('div', 'boons');
+    game.boons.forEach(function (bn, i) {
+      var card = el('button', 'boon');
+      card.innerHTML = '<span class="bi">' + bn.icon + '</span><span class="bn">' + bn.name + '</span><span class="bd">' + bn.desc + '</span>';
+      card.addEventListener('click', function () { pickBoon(i); });
+      row.appendChild(card);
+    });
+    showScreen([h, p, row], 'levelup');
+  }
+
+  var countTimer = null;
   function showResult(win) {
-    var h = el('h2', null, win ? '🌅 YOU SURVIVED' : '💀 THE FIRE DIED'); if (win) h.style.color = '#8affc1';
+    if (countTimer) { clearInterval(countTimer); countTimer = null; }
+    var nights = win ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
+    var h = el('h2', null, win ? '🌅 YOU SURVIVED' : '💀 THE FIRE DIED');
     var reason = win ? 'Dawn breaks on the fifth night. The dark could not take your fire.' : (game.fuel <= 0 ? 'Your fire guttered out, and the dark rushed in.' : 'You wandered too far, too cold, and the night claimed you.');
     var p = el('p', null, reason);
-    var nights = win ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
     var s1 = el('div', 'stat', 'Nights survived: ' + nights + ' / ' + CFG.nights);
     var s2 = el('div', 'stat', 'Wood gathered: ' + game.woodPopped);
     var s3 = el('div', 'stat', 'Shades burned: ' + game.shadesBurned);
-    var score = Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (win ? 1000 : 0));
-    var s4 = el('div', 'stat', '★ Score: ' + score); s4.style.fontSize = '20px';
-    var btn = el('button', 'big', 'PLAY AGAIN'); btn.addEventListener('click', function () { startGame(); });
-    showScreen([h, p, s1, s2, s3, s4, btn]);
+    var scoreEl = el('div', 'score', '★ 0');
+    var bestBadge = game.isBest ? el('div', 'newbest', '★ NEW BEST!') : el('div', 'stat', 'Best: ' + game.bestScore);
+    var btn = el('button', 'big', win ? 'PLAY AGAIN' : 'TRY AGAIN'); btn.addEventListener('click', function () { startGame(); });
+    var nodes = [h, p, s1, s2, s3, scoreEl, bestBadge, btn];
+    if (win) { var conf = el('div', 'confetti'); for (var c = 0; c < 44; c++) { var pc = el('i'); pc.style.left = (Math.random() * 100) + '%'; pc.style.background = ['#ffd24a', '#ff8a2b', '#8affc1', '#5fd0ff', '#ff5a6a'][c % 5]; pc.style.animationDelay = (Math.random() * 1.2) + 's'; pc.style.animationDuration = (1.6 + Math.random() * 1.4) + 's'; conf.appendChild(pc); } nodes.unshift(conf); }
+    showScreen(nodes, win ? 'win' : 'lose');
+    // score count-up
+    var target = game.lastScore, cur = 0, step = Math.max(1, Math.round(target / 40));
+    countTimer = setInterval(function () { cur = Math.min(target, cur + step); scoreEl.textContent = '★ ' + cur; if (cur >= target) { clearInterval(countTimer); countTimer = null; } }, 28);
   }
   function syncDock() {
     var canFeed = game.bank >= CFG.feedCost;
@@ -1176,7 +1310,7 @@ var UI = (function () {
     else stick.style.opacity = 0;
   }
 
-  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD };
+  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, showLevelUp: showLevelUp, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD };
 })();
 
 // ---------------------------------------------------------------------------
@@ -1196,7 +1330,7 @@ requestAnimationFrame(frame);
 // debug hook for the headless harness
 window.__EMBER = {
   game: game, survivor: survivor, trees: trees, shades: shades, drops: drops, input: input,
-  cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, feed: feedFire, buy: buyUpgrade, start: startGame,
+  cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, feed: feedFire, buy: buyUpgrade, start: startGame, pick: pickBoon,
   step: function (dt) { update(dt); }, cost: function (k) { return upgradeCost(UPGRADES[k]); },
   fireRadius: fireRadius, carryCap: carryCap
 };
