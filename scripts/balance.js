@@ -48,17 +48,17 @@ const server = http.createServer((req, res) => {
         guard++;
         if (G.state === 'levelup') { E.pick(Math.floor(Math.random() * 3)); continue; }
         const cap = E.carryCap();
-        // reckless play sometimes just forgets to feed
-        const skip = policy.skipFeed && Math.random() < policy.skipFeed;
-        if (!skip && G.bank >= 5 && G.fuel < policy.feedAt) { E.feed(); feeds++; }
-        if (G.fuel > 62 && G.warmth > 55) {
+        // wood auto-feeds the fire when you return; upgrades are bought with spare fuel
+        if (G.fuel > policy.buyAt && G.phase === 'dawn') {
           for (const k of ['stoke', 'satchel', 'ashheart', 'coat']) {
-            if (E.upgrades[k].lvl < E.upgrades[k].max && G.bank >= E.cost(k) + 10) { E.buy(k); buys++; break; }
+            if (E.upgrades[k].lvl < E.upgrades[k].max && G.fuel >= E.cost(k) + policy.buyAt) { E.buy(k); buys++; break; }
           }
         }
+        // reckless play dawdles instead of returning to feed
+        const lazy = policy.skipFeed && Math.random() < policy.skipFeed;
         if (G.warmth < policy.warmAt) steer(E.cfg.fireX, E.cfg.fireY, policy.noise);
-        else if (G.carry < cap && E.trees.length) { const t = nearestTree(); if (t) steer(t.x, t.y, policy.noise); }
-        else steer(E.cfg.fireX, E.cfg.fireY, policy.noise);
+        else if ((G.carry < cap || lazy) && E.trees.length) { const t = nearestTree(); if (t) steer(t.x, t.y, policy.noise); }
+        else steer(E.cfg.fireX, E.cfg.fireY, policy.noise);   // return -> auto-feeds the fire
         E.step(dt);
         if (G.fuel < minFuel) minFuel = G.fuel;
         if (G.warmth < minWarmth) minWarmth = G.warmth;
@@ -70,9 +70,9 @@ const server = http.createServer((req, res) => {
       };
     }
 
-    const sensible = { name: 'sensible', feedAt: 48, warmAt: 28, noise: 0 };
-    const careless = { name: 'careless', feedAt: 30, warmAt: 16, noise: 0.6 };
-    const reckless = { name: 'reckless', feedAt: 22, warmAt: 10, noise: 0.9, skipFeed: 0.35 };
+    const sensible = { name: 'sensible', buyAt: 70, warmAt: 28, noise: 0 };
+    const careless = { name: 'careless', buyAt: 55, warmAt: 16, noise: 0.6 };
+    const reckless = { name: 'reckless', buyAt: 40, warmAt: 10, noise: 0.9, skipFeed: 0.4 };
     for (let g = 0; g < N; g++) results.push(play(sensible));
     for (let g = 0; g < N; g++) results.push(play(careless));
     for (let g = 0; g < N; g++) results.push(play(reckless));

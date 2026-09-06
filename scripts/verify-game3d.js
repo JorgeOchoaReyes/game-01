@@ -53,8 +53,7 @@ const server = http.createServer((req, res) => {
       if (g.carry < cap && best) { tx = best.x; ty = best.y; } else { tx = E.cfg.fireX; ty = E.cfg.fireY; }
       const dx = tx - E.survivor.x, dy = ty - E.survivor.y, d = Math.hypot(dx, dy) || 1;
       E.input.active = true; E.input.dx = dx / d; E.input.dy = dy / d; E.input.mag = d > 12 ? 1 : d / 12;
-      if (g.bank >= 5 && g.fuel < 48) E.feed();
-      if (g.bank >= 18) E.buy('stoke');
+      if (g.fuel > 80 && g.phase === 'dawn') E.buy('stoke');   // upgrades cost fuel now
       await wait(28);
     }
     E.input.active = false;
@@ -66,8 +65,13 @@ const server = http.createServer((req, res) => {
     state: __EMBER.game.state, stoke: __EMBER.upgrades.stoke.lvl
   }));
   const act = await page.evaluate(() => {
-    const E = window.__EMBER; E.game.bank = 60; const f0 = E.game.fuel; E.feed(); const f1 = E.game.fuel;
-    E.buy('ashheart'); return { feedUp: f1 > f0, ash: E.upgrades.ashheart.lvl };
+    const E = window.__EMBER;
+    // dumping carried wood should raise fuel (wood feeds the fire)
+    E.game.fuel = 40; E.game.carry = 6; E.survivor.x = E.cfg.fireX; E.survivor.y = E.cfg.fireY;
+    const f0 = E.game.fuel; E.step(1 / 30); const feedUp = E.game.fuel > f0;
+    // buying an upgrade should spend fuel
+    E.game.fuel = 90; const b0 = E.game.fuel; E.buy('ashheart');
+    return { feedUp: feedUp, ash: E.upgrades.ashheart.lvl, fuelSpent: E.game.fuel < b0 };
   });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(ROOT, 'scripts/shots/32-night3d.png') });
@@ -78,7 +82,7 @@ const server = http.createServer((req, res) => {
   console.log('play:', JSON.stringify(st));
   console.log('actions:', JSON.stringify(act));
   if (errs.length) console.log('ERR:', errs.slice(0, 6).join(' | '));
-  const ok = glok && ext.length === 0 && errs.length === 0 && st.wood > 0 && act.feedUp && act.ash === 1;
+  const ok = glok && ext.length === 0 && errs.length === 0 && st.wood > 0 && act.feedUp && act.ash === 1 && act.fuelSpent;
   console.log('ALL OK:', ok);
   process.exit(ok ? 0 : 1);
 })();

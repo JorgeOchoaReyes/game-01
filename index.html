@@ -95,6 +95,7 @@ html, body {
 .dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .dock-row { display: flex; gap: 6px; justify-content: center; }
+.docklabel { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--ash); pointer-events: none; padding-bottom: 2px; }
 .btn { pointer-events: auto; flex: 1 1 0; min-height: 52px; border: 1px solid var(--panel-edge); border-radius: 12px;
   background: var(--panel); color: #f3e9df; font-size: 13px; font-weight: 700; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 2px; line-height: 1.1; transition: transform 0.06s, background 0.1s, opacity 0.1s; }
@@ -198,7 +199,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
+  feedPerLog: 3.6, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -542,11 +543,12 @@ var Audio2 = (function () {
   };
 })();
 
+// Upgrades are bought by spending the fire's own fuel (its strength = its currency).
 var UPGRADES = {
-  stoke: { name: 'Stoke', lvl: 0, max: 5, base: 12, step: 8 },
-  ashheart: { name: 'Ashheart', lvl: 0, max: 5, base: 14, step: 9 },
-  satchel: { name: 'Satchel', lvl: 0, max: 5, base: 10, step: 7 },
-  coat: { name: 'Coat', lvl: 0, max: 5, base: 10, step: 7 }
+  stoke: { name: 'Stoke', lvl: 0, max: 5, base: 10, step: 6 },
+  ashheart: { name: 'Ashheart', lvl: 0, max: 5, base: 12, step: 7 },
+  satchel: { name: 'Satchel', lvl: 0, max: 5, base: 9, step: 5 },
+  coat: { name: 'Coat', lvl: 0, max: 5, base: 9, step: 5 }
 };
 function upgradeCost(u) { return u.base + u.step * u.lvl; }
 
@@ -591,7 +593,7 @@ var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chil
 var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
-function fireRadius() { return (78 + (game.fuel / CFG.fuelMax) * 120 + UPGRADES.stoke.lvl * 14) * (1 + (game.mods.radius || 0)) * (buffOn('inferno') ? 1.22 : 1); }
+function fireRadius() { return (78 + clamp(game.fuel / CFG.fuelMax, 0, 1) * 120 + UPGRADES.stoke.lvl * 14) * (1 + (game.mods.radius || 0)) * (buffOn('inferno') ? 1.22 : 1); }
 function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
 function carryCap() { return CFG.carryBase + UPGRADES.satchel.lvl * 3 + (game.mods.carry || 0); }
 function burnDps() { return (34 + UPGRADES.ashheart.lvl * 12) * (1 + (game.mods.burn || 0)) * (buffOn('inferno') ? 2 : 1); }
@@ -657,7 +659,7 @@ function updateDrops(dt) {
 
 function startGame() {
   game.state = 'play'; game.time = 0;
-  game.fuel = 65; game.warmth = 100; game.bank = 0; game.carry = 0;
+  game.fuel = 65; game.warmth = 100; game.carry = 0;
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
@@ -700,23 +702,17 @@ function pickBoon(idx) {
   setBanner('DAWN', 'Night ' + (game.night - 1) + ' survived — stock up', 2.6);
   UI.showScreen(null); UI.syncDock();
 }
-function feedFire() {
-  if (game.state !== 'play' || game.bank < CFG.feedCost) return;
-  game.bank -= CFG.feedCost;
-  game.fuel = clamp(game.fuel + CFG.feedGain, 0, CFG.fuelMax + 40);
-  triggerFlare(fireRadius() * 0.9, 14);
-  game.flash = Math.max(game.flash, 0.35); game.shake = Math.max(game.shake, 4);
-  Audio2.feed(); UI.syncDock(); UI.flashBtn('feed');
-}
 function triggerFlare(radius, dmg) {
   flares.push({ x: CFG.fireX, y: CFG.fireY, r: 20, max: radius, dmg: dmg, life: 0.45, maxLife: 0.45 });
   addParticles(CFG.fireX, CFG.fireY, 22, '#ffce54', 220, 0.5, 4);
 }
+// Upgrades cost the fire's own fuel — a real trade-off: dip the fire now for lasting power.
 function buyUpgrade(key) {
   if (game.state !== 'play') return;
   var u = UPGRADES[key]; if (u.lvl >= u.max) return;
-  var cost = upgradeCost(u); if (game.bank < cost) return;
-  game.bank -= cost; u.lvl++;
+  var cost = upgradeCost(u); if (game.fuel < cost) return;
+  game.fuel -= cost; u.lvl++;
+  game.shake = Math.max(game.shake, 3);
   Audio2.upgrade(); addParticles(survivor.x, survivor.y, 16, '#8affc1', 120, 0.6, 3);
   UI.syncDock(); UI.flashBtn(key);
 }
@@ -861,11 +857,12 @@ function update(dt) {
   // auto-dump: step into the generous drop-zone ring and your wood flies to the fire
   if (game.carry > 0 && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
     var n = game.carry;
-    game.bank += n; game.carry = 0;
+    game.carry = 0;
+    game.fuel = clamp(game.fuel + n * CFG.feedPerLog, 0, CFG.fuelCap);   // wood feeds the fire directly
     for (var ti = 0; ti < Math.min(n, 10); ti++) {
       tosses.push({ x: survivor.x + rand(-10, 10), y: survivor.y + rand(-10, 10), t: -ti * 0.05, dur: 0.4 });
     }
-    game.dumpFlash = 0.5; game.shake = Math.max(game.shake, 3);
+    game.dumpFlash = 0.6; game.shake = Math.max(game.shake, 3);
     Audio2.dump();
     UI.syncDock();
   }
@@ -1229,7 +1226,7 @@ var UI = (function () {
     '<div class="phasebar"><i></i></div>' +
     '<div class="meter fire"><i></i><span class="lbl">🔥 FIRE</span><span class="val"></span></div>' +
     '<div class="meter warmth"><i></i><span class="lbl">❄ WARMTH</span><span class="val"></span></div>' +
-    '<div class="woodrow"><span class="bank"></span><span class="carrywrap"><em>PACK</em><span class="pips"></span></span></div>';
+    '<div class="woodrow"><span class="bank">🪵 wood feeds the fire</span><span class="carrywrap"><em>PACK</em><span class="pips"></span></span></div>';
   stage.appendChild(hud);
   var q = function (s) { return hud.querySelector(s); };
   var elNight = q('.night'), elPhase = q('.phase'), elPhaseBar = q('.phasebar'), elPhaseFill = q('.phasebar > i');
@@ -1241,17 +1238,15 @@ var UI = (function () {
 
   var banner = el('div'); banner.id = 'banner'; banner.innerHTML = '<div class="main"></div><div class="sub"></div>'; stage.appendChild(banner);
   var bMain = banner.querySelector('.main'), bSub = banner.querySelector('.sub');
-  var warn = el('div', null, '⚠ THE FIRE IS DYING — FEED IT'); warn.id = 'warn'; stage.appendChild(warn);
-  var packhint = el('div', null, '🎒 PACK FULL — return to the fire to bank'); packhint.id = 'packhint'; stage.appendChild(packhint);
+  var warn = el('div', null, '⚠ THE FIRE IS DYING — BRING WOOD'); warn.id = 'warn'; stage.appendChild(warn);
+  var packhint = el('div', null, '🎒 PACK FULL — return to feed the fire'); packhint.id = 'packhint'; stage.appendChild(packhint);
 
   var stick = el('div'); stick.id = 'stick'; stick.innerHTML = '<i></i>'; stage.appendChild(stick);
   var stickNub = stick.querySelector('i');
 
   // dock
   var dock = el('div', 'dock'); stage.appendChild(dock);
-  var feedRow = el('div', 'dock-row');
-  var feedBtn = el('button', 'btn feed'); feedBtn.innerHTML = '<span class="main">🔥 FEED FIRE</span><span class="cost"></span>';
-  feedBtn.addEventListener('click', feedFire); feedRow.appendChild(feedBtn); dock.appendChild(feedRow);
+  var dockLabel = el('div', 'docklabel', 'SPEND 🔥 FIRE TO UPGRADE'); dock.appendChild(dockLabel);
   var upRow = el('div', 'dock-row'), upBtns = {};
   Object.keys(UPGRADES).forEach(function (key) {
     var b = el('button', 'btn'); b.innerHTML = '<span class="main">' + UPGRADES[key].name + '</span><span class="cost"></span><span class="lvl"></span>';
@@ -1280,7 +1275,7 @@ var UI = (function () {
     legend.appendChild(legendRow('#4f9a56', 'Pines — walk into them to gather wood'));
     legend.appendChild(legendRow('#8f79ff', 'Shades — drain the fire at night'));
     legend.appendChild(legendRow('#ffd24a', 'Glowing drops — grab them for powers'));
-    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood; return to the fire to bank it, then FEED it or buy upgrades. Swing your torch at shades to beat them back. Grab glowing drops for powers. Survive 5 nights.');
+    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood, then return to the fire — the wood feeds it and it burns brighter. Spend fire to buy upgrades. Swing your torch at shades to beat them back. Grab glowing drops for powers. Survive 5 nights.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
     var best = loadBest();
     var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;
@@ -1326,18 +1321,14 @@ var UI = (function () {
     countTimer = setInterval(function () { cur = Math.min(target, cur + step); scoreEl.textContent = '★ ' + cur; if (cur >= target) { clearInterval(countTimer); countTimer = null; } }, 28);
   }
   function syncDock() {
-    var canFeed = game.bank >= CFG.feedCost;
-    feedBtn.classList.toggle('disabled', !canFeed);
-    feedBtn.classList.toggle('attn', canFeed && game.fuel < 32);
-    feedBtn.querySelector('.cost').textContent = CFG.feedCost + ' wood → +' + CFG.feedGain + ' fire';
     Object.keys(UPGRADES).forEach(function (key) {
       var u = UPGRADES[key], b = upBtns[key], maxed = u.lvl >= u.max, cost = upgradeCost(u);
-      b.classList.toggle('disabled', maxed || game.bank < cost);
-      b.querySelector('.cost').textContent = maxed ? 'MAX' : (cost + '🪵');
+      b.classList.toggle('disabled', maxed || game.fuel < cost);
+      b.querySelector('.cost').textContent = maxed ? 'MAX' : ('🔥 ' + cost);
       b.querySelector('.lvl').textContent = 'Lv ' + u.lvl + '/' + u.max;
     });
   }
-  function flashBtn(id) { var b = id === 'feed' ? feedBtn : upBtns[id]; if (!b) return; b.classList.add('flash'); setTimeout(function () { b.classList.remove('flash'); }, 120); }
+  function flashBtn(id) { var b = upBtns[id]; if (!b) return; b.classList.add('flash'); setTimeout(function () { b.classList.remove('flash'); }, 120); }
   function flashCarry() { elCarryWrap.classList.remove('pop'); void elCarryWrap.offsetWidth; elCarryWrap.classList.add('pop'); }
 
   function updateHUD() {
@@ -1353,7 +1344,6 @@ var UI = (function () {
     elFireVal.textContent = Math.round(game.fuel);
     elWarm.style.transform = 'scaleX(' + clamp(game.warmth / CFG.warmthMax, 0, 1) + ')';
     elWarmVal.textContent = Math.round(game.warmth);
-    elBank.textContent = '🪵 BANK ' + game.bank;
     var cap = carryCap();
     var pipKey = game.carry + '/' + cap;
     if (elPips._key !== pipKey) {
@@ -1409,7 +1399,7 @@ requestAnimationFrame(frame);
 // debug hook for the headless harness
 window.__EMBER = {
   game: game, survivor: survivor, trees: trees, shades: shades, drops: drops, input: input,
-  cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, feed: feedFire, buy: buyUpgrade, start: startGame, pick: pickBoon,
+  cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, buy: buyUpgrade, start: startGame, pick: pickBoon,
   step: function (dt) { update(dt); }, cost: function (k) { return upgradeCost(UPGRADES[k]); },
   fireRadius: fireRadius, carryCap: carryCap
 };
