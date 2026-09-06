@@ -27,7 +27,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 66
+  feedCost: 4, feedGain: 14, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -297,6 +297,14 @@ function buildDrop(type) {
   scene.add(g); return g;
 }
 
+// wood-toss meshes (carried wood flying to the fire when you auto-dump)
+var tossMap = new Map();
+function buildToss() {
+  var m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.34),
+    new THREE.MeshStandardMaterial({ color: 0xc98a4a, roughness: 1 }));
+  m.castShadow = true; scene.add(m); return m;
+}
+
 // ground-plane particle points (chips, deposits, deaths, flare sparks)
 var PMAX = 500;
 var pGeo = new THREE.BufferGeometry();
@@ -348,6 +356,7 @@ var Audio2 = (function () {
     chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
     fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
     wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
+    dump: function () { noise(0.28, 0.22, 900); tone(200, 0.28, 'sawtooth', 0.16, 460); },
     crit: function () { tone(720, 0.1, 'square', 0.14, 980); tone(480, 0.14, 'triangle', 0.12); },
     pickup: function () { [660, 880, 1180].forEach(function (f, i) { setTimeout(function () { tone(f, 0.14, 'triangle', 0.18); }, i * 70); }); },
     sizzle: function () { noise(0.14, 0.06, 2600); },
@@ -408,7 +417,7 @@ function computeScore() {
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0, prevPhase: 0 };
-var trees = [], shades = [], particles = [], flares = [], drops = [];
+var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
 function fireRadius() { return (78 + (game.fuel / CFG.fuelMax) * 120 + UPGRADES.stoke.lvl * 14) * (1 + (game.mods.radius || 0)) * (buffOn('inferno') ? 1.22 : 1); }
@@ -481,7 +490,7 @@ function startGame() {
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
-  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0;
+  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; game.dumpFlash = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -588,7 +597,9 @@ function update(dt) {
   if (bd > maxB) { survivor.x = CFG.fireX + bdx / bd * maxB; survivor.y = CFG.fireY + bdy / bd * maxB; }
   // solid trees: push the survivor out of any trunk it overlaps (no walking through)
   for (var ck = 0; ck < trees.length; ck++) {
-    var ct = trees[ck], cx = survivor.x - ct.x, cy = survivor.y - ct.y, cd = Math.hypot(cx, cy);
+    var ct = trees[ck];
+    if (ct.felling) continue;                          // walk through a toppling tree
+    var cx = survivor.x - ct.x, cy = survivor.y - ct.y, cd = Math.hypot(cx, cy);
     var minD = survivor.r + ct.r * 0.7;
     if (cd < minD) {
       if (cd < 0.001) { cx = 1; cy = 0; cd = 1; }   // dead-centre: pick a direction
@@ -607,7 +618,9 @@ function update(dt) {
 
   var near = null, nearD = 1e9;
   for (var i = 0; i < trees.length; i++) {
-    var tt = trees[i], d = dist2(survivor.x, survivor.y, tt.x, tt.y);
+    var tt = trees[i];
+    if (tt.felling) continue;                         // a toppling tree can't be chopped
+    var d = dist2(survivor.x, survivor.y, tt.x, tt.y);
     if (d < Math.pow(tt.r + survivor.r + 20, 2) && d < nearD) { near = tt; nearD = d; }
   }
   targetTree = near;
@@ -644,8 +657,10 @@ function update(dt) {
       }
       UI.flashCarry();
       if (near.wood <= 0) {
-        trees.splice(trees.indexOf(near), 1);
-        addParticles(near.x, near.y, 22, '#6a9a55', 155, 0.7, 3);  // felled burst
+        near.felling = 0.55;                                       // topple animation, then removed
+        addParticles(near.x, near.y, 26, '#6a9a55', 175, 0.75, 3); // felled burst
+        addParticles(near.x, near.y, 10, '#ffe08a', 150, 0.6, 3);  // reward sparkle
+        game.shake = Math.max(game.shake, 4);
         Audio2.fell();
         // regrow is handled by the deterministic top-up below (survives restarts)
       }
@@ -655,15 +670,35 @@ function update(dt) {
     survivor.chopT = 0; survivor.prevPhase = 0;
     if (near) game.packFull = true;   // standing at a tree but the pack is full
   }
-  // bank wood by stepping into the fixed drop-zone ring around the fire
-  if (dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
-    if (game.carry > 0) { game.bank += game.carry; game.carry = 0; addParticles(CFG.fireX, CFG.fireY, 8, '#ffd24a', 80, 0.45, 3); Audio2.wood(); UI.syncDock(); }
+  // auto-dump: step into the generous drop-zone ring and your wood flies to the fire
+  if (game.carry > 0 && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
+    var n = game.carry;
+    game.bank += n; game.carry = 0;
+    for (var ti = 0; ti < Math.min(n, 10); ti++) {
+      tosses.push({ x: survivor.x + rand(-10, 10), y: survivor.y + rand(-10, 10), t: -ti * 0.05, dur: 0.4 });
+    }
+    game.dumpFlash = 0.5; game.shake = Math.max(game.shake, 3);
+    Audio2.dump();
+    UI.syncDock();
   }
+  // advance toppling trees, then remove them when the animation finishes
+  var living = 0;
+  for (var fi = trees.length - 1; fi >= 0; fi--) {
+    if (trees[fi].felling) { trees[fi].felling -= dt; if (trees[fi].felling <= 0) trees.splice(fi, 1); }
+    else living++;
+  }
+  // wood-toss animation timers (visuals updated in render); land a spark at the fire
+  for (var wi = tosses.length - 1; wi >= 0; wi--) {
+    tosses[wi].t += dt;
+    if (tosses[wi].t >= tosses[wi].dur) { addParticles(CFG.fireX, CFG.fireY, 3, '#ffd24a', 70, 0.35, 3); tosses.splice(wi, 1); }
+  }
+  if (game.dumpFlash > 0) game.dumpFlash = Math.max(0, game.dumpFlash - dt * 2);
+
   // keep the forest stocked with reachable trees (deterministic top-up to 6;
   // refills faster the emptier it gets, so heavy gathering never runs it dry)
-  if (trees.length < 6) {
+  if (living < 6) {
     game.treeTimer = (game.treeTimer || 0) - dt;
-    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = trees.length < 3 ? 0.25 : 0.6; }
+    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = living < 3 ? 0.25 : 0.6; }
   } else game.treeTimer = 0;
 
   var R = fireRadius(), dps = burnDps(), anyBurning = false;
@@ -793,6 +828,7 @@ function renderScene(dt) {
   var playing = game.state === 'play';
   rangeRing.visible = playing; bankRing.visible = playing;   // gameplay guides only while playing
   var fs = 0.32 + it * 1.05;
+  fs *= (1 + (game.dumpFlash || 0) * 0.45);                               // flares up as wood lands
   if (game.state === 'over') fs *= (1 - clamp(game.endT / 2.0, 0, 1));   // fire guttering out on a loss
   else if (game.state === 'win') fs *= 1.15;                              // roaring on a win
   flameOuter.scale.set(fs, fs * flick, fs); flameOuter.position.y = 0.18 + fs * 0.72;
@@ -867,6 +903,14 @@ function renderScene(dt) {
     if (!mesh) { mesh = buildTree(tr.seed); treeMap.set(tr, mesh); }
     mesh.position.set(wx(tr.x), 0, wz(tr.y));
     var ud = mesh.userData;
+    if (tr.felling) {                                   // topple animation, then it's removed
+      var fk = 1 - clamp(tr.felling / 0.55, 0, 1);      // 0 -> 1 as it falls
+      ud.pine.rotation.z = fk * 1.55; ud.pine.rotation.x = fk * 0.3;
+      ud.pine.scale.setScalar(ud.baseScale * 0.6 * (1 - fk * 0.45));
+      ud.ring.visible = false; ud.barBg.visible = false; ud.barFg.visible = false;
+      continue;
+    }
+    ud.ring.visible = true;
     var chopping = (tr === targetTree) && game.carry < carryCap();
     if (tr.hit > 0) tr.hit -= dt;
     var hitK = clamp((tr.hit || 0) / 0.18, 0, 1);
@@ -932,6 +976,18 @@ function renderScene(dt) {
     dm.visible = d.life > 2 ? true : (Math.sin(t * 18) > -0.3); // blink when about to expire
   }
   dropMap.forEach(function (dm, d) { if (!seenD.has(d)) { scene.remove(dm); disposeGroup(dm); dropMap.delete(d); } });
+
+  // wood tossed into the fire — arcs from the survivor to the flames
+  var seenTo = new Set();
+  for (var oi = 0; oi < tosses.length; oi++) {
+    var to = tosses[oi]; seenTo.add(to);
+    var tm = tossMap.get(to); if (!tm) { tm = buildToss(); tossMap.set(to, tm); }
+    var pr = clamp(to.t / to.dur, 0, 1);
+    tm.position.set(lerp(wx(to.x), 0, pr), 0.3 + Math.sin(pr * Math.PI) * 1.3, lerp(wz(to.y), 0, pr));
+    tm.rotation.x += dt * 11; tm.rotation.y += dt * 8;
+    tm.visible = to.t >= 0;
+  }
+  tossMap.forEach(function (tm, to) { if (!seenTo.has(to)) { scene.remove(tm); disposeGroup(tm); tossMap.delete(to); } });
 
   // ground-plane particles
   var pn = Math.min(particles.length, PMAX);

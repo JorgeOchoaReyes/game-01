@@ -91,6 +91,18 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     Brute shade from night 3+, steeper per-night escalation, critical chops for
     bonus wood, and solid tree collision (no walking through trunks). Re-balanced:
     sensible 5/5, careless 5/5 on the razor's edge, reckless ~3/5.
+12. **Readability pass (from playtests).** Carry shown as a PACK pip meter (and a
+    floating meter above the avatar), plus a "pack full" nudge; a fire strength/
+    range ring that grows and brightens with fuel; a bank drop-zone ring. Fixed a
+    tree-respawn dry-out with a deterministic top-up that always keeps 6 reachable
+    trees and refills fast.
+13. **Retention + game-feel pass.** Between-nights level-up: pick 1 of 3 permanent
+    run boons. Persistent best score (localStorage) with a NEW BEST chase. A
+    triumphant win (sunrise bloom, roaring fire, confetti, count-up) and a bleak
+    loss (world darkens, fire gutters out). Fell trees now topple with a reward
+    burst; a full pack auto-dumps from a generous range with wood arcing into the
+    fire and a flare-up. Submission-checked: readable single index.html, Three.js
+    in vendor/, zero external requests, portrait, single-player.
 
 ## Balancing with a bot
 
