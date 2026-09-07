@@ -168,6 +168,12 @@ headless driver for behavior. I never trusted "done" without actually playing it
     reachable area and looked choppable, by pushing it well past the field edge as a
     pure backdrop. Balance holds a clean gradient (sensible ~89%, careless ~66%,
     reckless ~20% over 35-game cohorts).
+26. **Harder fire, tighter combos (from playtests).** The fire was too easy to keep
+    alive, so the fuel drain is now meaningfully steeper (a higher base, a bigger
+    per-night ramp, and a harsher night penalty), which makes keeping it lit a real
+    struggle. The combo window also dropped from 2.6s to 1.5s, so you have to keep
+    acting to hold a streak. Re-tuned to a harder but fair gradient: sensible ~63%,
+    careless ~34%, reckless ~3% over 35-game cohorts.
 
 ## Balancing with a bot
 

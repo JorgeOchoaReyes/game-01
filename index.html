@@ -684,7 +684,7 @@ var game = {
 // Momentum combo: any reward action (chop, crit, kill, feed) keeps a streak alive.
 // It multiplies the style-bonus score and drives a HUD readout + milestone flourishes,
 // so continuous play is continuously rewarded — the core "keep going" hook.
-var COMBO_HOLD = 2.6;
+var COMBO_HOLD = 1.5;
 function comboMult() { return 1 + Math.min(game.combo, 40) * 0.05; }   // up to 3x
 function bumpCombo(n) {
   game.combo += (n || 1);
@@ -979,7 +979,7 @@ function update(dt) {
   // floating reward text rises + fades
   for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
 
-  var decay = 1.2 + game.night * 0.33 + (game.phase === 'night' ? 1.5 : 0);
+  var decay = 1.45 + game.night * 0.4 + (game.phase === 'night' ? 1.9 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
   game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
