@@ -130,6 +130,15 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     aggressive play earns more powers. Best-combo and the bonus feed the
     persistent score chase (shown on the end screen). Re-tuned to keep the
     gradient: sensible 5/5, careless ~3–5/5, reckless 0/5.
+18. **Endless mode.** Surviving Night 5 is still a real, celebrated win — but the
+    win screen now offers **KEEP THE FIRE BURNING**: the nights no longer end,
+    escalation continues forever (spawn rate, HP, decay and cold keep climbing,
+    with caps so late waves stay renderable), and the run ends only in death,
+    the score climbing the whole way. Upgrades, boons and best-score carry
+    through. Verified headless: a competent bot wins Night 5, continues, and is
+    eventually overwhelmed around Night 15 — the intended "how far can you get"
+    curve. The 5-night arc's balance is unchanged (the escalation caps only bite
+    from Night 7+).
 
 ## Balancing with a bot
 

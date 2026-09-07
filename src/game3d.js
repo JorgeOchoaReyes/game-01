@@ -423,7 +423,7 @@ var game = {
   night: 1, phase: 'dawn', phaseTime: CFG.dawnLen, woodPopped: 0, shadesBurned: 0,
   shake: 0, lowFuelWarn: 0, flash: 0, banner: null, tipShown: false, buffs: {}, packFull: false,
   mods: {}, endT: 0, lastScore: 0, bestScore: 0, isBest: false, boons: [],
-  combo: 0, comboT: 0, comboBest: 0, bonus: 0
+  combo: 0, comboT: 0, comboBest: 0, bonus: 0, endless: false
 };
 
 // Momentum combo: any reward action (chop, crit, kill, feed) keeps a streak alive.
@@ -456,7 +456,7 @@ var BOONS = [
 function loadBest() { try { return parseInt(localStorage.getItem('ember_best') || '0', 10) || 0; } catch (e) { return 0; } }
 function saveBest(v) { try { localStorage.setItem('ember_best', String(v)); } catch (e) {} }
 function computeScore() {
-  var nights = game.state === 'win' ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
+  var nights = game.state === 'win' ? game.night : (game.night - (game.phase === 'dawn' ? 1 : 0));
   return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (game.bonus || 0) + (game.state === 'win' ? 1000 : 0));
 }
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
@@ -550,7 +550,7 @@ function startGame() {
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; game.dumpFlash = 0;
-  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -570,6 +570,23 @@ function endGame(win) {
   if (win) { game.fuel = CFG.fuelMax; game.buffs = {}; }  // a roaring victory fire
   if (win) Audio2.win(); else Audio2.lose();
   UI.showResult(win);
+}
+
+// After the first 5-night clear the player may keep going: nights escalate forever,
+// the run ends only in death, and the score keeps climbing — the endless replay hook.
+// Upgrades and boons are kept; the fire is restoked and the stage reset for a fresh dawn.
+function continueEndless() {
+  game.endless = true; game.state = 'play';
+  game.night = CFG.nights + 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
+  game.fuel = clamp(game.fuel, 55, CFG.fuelCap); game.warmth = CFG.warmthMax; game.buffs = {};
+  game.endT = 0; game.nightSpawnAcc = 0; game.combo = 0; game.comboT = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
+  shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0;
+  var living = 0; for (var i = 0; i < trees.length; i++) if (!trees[i].felling) living++;
+  for (var s = living; s < 6; s++) spawnTree();
+  spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType());
+  setBanner('ENDLESS NIGHTS', 'They no longer end — how long can you last?', 3.2);
+  UI.showScreen(null); UI.syncDock();
 }
 
 // present the between-nights boon pick (the "level up" beat)
@@ -618,15 +635,15 @@ function update(dt) {
     if (game.phaseTime <= 0) { game.phase = 'night'; game.phaseTime = CFG.nightLen; game.nightSpawnAcc = 0; setBanner('NIGHT ' + game.night, 'The dark comes — keep it burning', 2.4); Audio2.night(); }
   } else {
     var hpMul = 1 + (game.night - 1) * 0.7, spdMul = 1 + (game.night - 1) * 0.12;
-    var ratePerSec = 0.3 + game.night * 0.24;
-    var bruteChance = game.night >= 3 ? 0.15 + (game.night - 3) * 0.1 : 0;
+    var ratePerSec = Math.min(0.3 + game.night * 0.24, 3.4);            // capped so endless waves stay renderable
+    var bruteChance = game.night >= 3 ? Math.min(0.15 + (game.night - 3) * 0.1, 0.55) : 0;
     game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
     while (game.nightSpawnAcc >= 1) {
-      spawnShade(hpMul, spdMul, Math.random() < bruteChance ? 'brute' : 'shade');
+      if (shades.length < 72) spawnShade(hpMul, spdMul, Math.random() < bruteChance ? 'brute' : 'shade');   // soft cap
       game.nightSpawnAcc -= 1;
     }
     if (game.phaseTime <= 0) {
-      if (game.night >= CFG.nights) { endGame(true); return; }
+      if (game.night >= CFG.nights && !game.endless) { endGame(true); return; }   // first-clear milestone (then optional endless)
       game.night++; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
       shades.length = 0; addParticles(CFG.fireX, CFG.fireY, 34, '#ffd24a', 170, 0.9, 4);
       startLevelUp();   // pause for a boon pick, then resume dawn
@@ -1258,18 +1275,25 @@ var UI = (function () {
   var countTimer = null;
   function showResult(win) {
     if (countTimer) { clearInterval(countTimer); countTimer = null; }
-    var nights = win ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
+    var nights = win ? game.night : (game.night - (game.phase === 'dawn' ? 1 : 0));
     var h = el('h2', null, win ? '🌅 YOU SURVIVED' : '💀 THE FIRE DIED');
-    var reason = win ? 'Dawn breaks on the fifth night. The dark could not take your fire.' : (game.fuel <= 0 ? 'Your fire guttered out, and the dark rushed in.' : 'You wandered too far, too cold, and the night claimed you.');
+    var reason = win ? 'Dawn breaks on the fifth night — you tamed the dark. Keep the fire burning for an endless run, or start fresh.' : (game.fuel <= 0 ? 'Your fire guttered out, and the dark rushed in.' : 'You wandered too far, too cold, and the night claimed you.');
     var p = el('p', null, reason);
-    var s1 = el('div', 'stat', 'Nights survived: ' + nights + ' / ' + CFG.nights);
+    var s1 = el('div', 'stat', game.endless ? ('Nights survived: ' + nights + ' 🔥') : ('Nights survived: ' + nights + ' / ' + CFG.nights));
     var s2 = el('div', 'stat', 'Wood gathered: ' + game.woodPopped);
     var s3 = el('div', 'stat', 'Shades burned: ' + game.shadesBurned);
     var s4 = el('div', 'stat', 'Best combo: ×' + game.comboBest);
     var scoreEl = el('div', 'score', '★ 0');
     var bestBadge = game.isBest ? el('div', 'newbest', '★ NEW BEST!') : el('div', 'stat', 'Best: ' + game.bestScore);
-    var btn = el('button', 'big', win ? 'PLAY AGAIN' : 'TRY AGAIN'); btn.addEventListener('click', function () { startGame(); });
-    var nodes = [h, p, s1, s2, s3, s4, scoreEl, bestBadge, btn];
+    var nodes = [h, p, s1, s2, s3, s4, scoreEl, bestBadge];
+    if (win) {
+      var contBtn = el('button', 'big', '🔥 KEEP THE FIRE BURNING'); contBtn.addEventListener('click', function () { continueEndless(); });
+      var againBtn = el('button', 'restart', '↻ New run'); againBtn.addEventListener('click', function () { startGame(); });
+      nodes.push(contBtn, againBtn);
+    } else {
+      var btn = el('button', 'big', 'TRY AGAIN'); btn.addEventListener('click', function () { startGame(); });
+      nodes.push(btn);
+    }
     if (win) { var conf = el('div', 'confetti'); for (var c = 0; c < 44; c++) { var pc = el('i'); pc.style.left = (Math.random() * 100) + '%'; pc.style.background = ['#ffd24a', '#ff8a2b', '#8affc1', '#5fd0ff', '#ff5a6a'][c % 5]; pc.style.animationDelay = (Math.random() * 1.2) + 's'; pc.style.animationDuration = (1.6 + Math.random() * 1.4) + 's'; conf.appendChild(pc); } nodes.unshift(conf); }
     showScreen(nodes, win ? 'win' : 'lose');
     // score count-up
@@ -1289,7 +1313,7 @@ var UI = (function () {
 
   function updateHUD() {
     if (game.state !== 'play') return;
-    elNight.textContent = 'NIGHT ' + game.night + ' / ' + CFG.nights;
+    elNight.textContent = game.endless ? ('NIGHT ' + game.night + ' ∞') : ('NIGHT ' + game.night + ' / ' + CFG.nights);
     var isNight = game.phase === 'night';
     elPhase.textContent = (isNight ? 'DARK  ' : 'DAWN  ') + Math.ceil(game.phaseTime) + 's';
     elPhase.className = 'phase ' + (isNight ? 'dark' : 'dawn');
@@ -1366,5 +1390,5 @@ window.__EMBER = {
   game: game, survivor: survivor, trees: trees, shades: shades, drops: drops, input: input,
   cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, buy: buyUpgrade, start: startGame, pick: pickBoon,
   step: function (dt) { update(dt); }, cost: function (k) { return upgradeCost(UPGRADES[k]); },
-  fireRadius: fireRadius, carryCap: carryCap
+  fireRadius: fireRadius, carryCap: carryCap, endless: continueEndless
 };
