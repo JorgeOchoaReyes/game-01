@@ -139,6 +139,17 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     eventually overwhelmed around Night 15 — the intended "how far can you get"
     curve. The 5-night arc's balance is unchanged (the escalation caps only bite
     from Night 7+).
+19. **Slingshot, irregulars & a hotter fire (from playtests).** A new **Slingshot**
+    drop auto-flings your carried wood at the nearest shade — wood is now ammo as
+    well as fuel, a real trade-off. A new teal **irregular** enemy hunts the
+    *player* instead of the fire, shrugs off the torch (only the slingshot or the
+    fire's own burn kills it), and knocks a log out of your pack on each hit — the
+    log drops as reclaimable ground wood. Shades reaching the fire now show a
+    clear "🔥 −N" drain popup so the threat reads. And the fire runs hotter the
+    deeper you go: from ~night 4 it shifts toward an intense, faster-flickering
+    **blue-white**, and the Nova drop flashes it blue-hot for a few seconds.
+    Tuned so the new threat stays fair (irregulars from night 3, they burn faster
+    in the fire): sensible ~4/5, careless a coin-flip, reckless 0/5.
 
 ## Balancing with a bot
 

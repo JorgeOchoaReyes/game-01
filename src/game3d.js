@@ -328,6 +328,22 @@ function buildToss() {
   m.castShadow = true; scene.add(m); return m;
 }
 
+// slingshot projectiles — a spinning wood chunk flung at shades
+var projMap = new Map();
+function buildProj() {
+  var m = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0xc98a4a, roughness: 1, emissive: 0x3a2410, emissiveIntensity: 0.4 }));
+  m.castShadow = true; scene.add(m); return m;
+}
+
+// dropped wood on the ground — knocked out of the pack by irregulars, walk over to reclaim
+var groundWoodMap = new Map();
+function buildGroundWood() {
+  var m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.32),
+    new THREE.MeshStandardMaterial({ color: 0xc98a4a, roughness: 1, emissive: 0x4a2f14, emissiveIntensity: 0.55 }));
+  m.castShadow = true; scene.add(m); return m;
+}
+
 // ground-plane particle points (chips, deposits, deaths, flare sparks)
 var PMAX = 500;
 var pGeo = new THREE.BufferGeometry();
@@ -381,6 +397,7 @@ var Audio2 = (function () {
     wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
     dump: function () { noise(0.28, 0.22, 900); tone(200, 0.28, 'sawtooth', 0.16, 460); },
     chainsaw: function () { tone(140, 0.18, 'sawtooth', 0.16, 210); tone(90, 0.2, 'square', 0.1, 130); noise(0.14, 0.12, 1800); },
+    sling: function () { tone(430, 0.1, 'triangle', 0.14, 760); noise(0.05, 0.06, 2200); },
     crit: function () { tone(720, 0.1, 'square', 0.14, 980); tone(480, 0.14, 'triangle', 0.12); },
     pickup: function () { [660, 880, 1180].forEach(function (f, i) { setTimeout(function () { tone(f, 0.14, 'triangle', 0.18); }, i * 70); }); },
     sizzle: function () { noise(0.14, 0.06, 2600); },
@@ -411,12 +428,18 @@ var BUFFS = {
   ward:     { name: 'Ward',     icon: '🛡', color: 0x8affc1, dur: 12 },
   harvest:  { name: 'Harvest',  icon: '🪓', color: 0xffd24a, dur: 14 },
   chainsaw: { name: 'Chainsaw', icon: '🪚', color: 0xff5a6a, dur: 10 },   // rare: one-shots trees
+  sling:    { name: 'Slingshot', icon: '🎯', color: 0x9ad0ff, dur: 14 },  // fling carried wood at shades
   nova:     { name: 'Nova',     icon: '💥', color: 0xffe08a, dur: 0 },    // instant blast
   toolbelt: { name: 'Toolbelt', icon: '🧰', color: 0xc98a4a, dur: 0 }     // instant, permanent +2 carry
 };
-// inferno/swift/harvest common; ward/nova less so; chainsaw/toolbelt rare (1 each)
-var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'nova', 'chainsaw', 'toolbelt'];
+// inferno/swift/harvest common; sling/ward/nova mid; chainsaw/toolbelt rare (1 each)
+var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'sling', 'sling', 'nova', 'chainsaw', 'toolbelt'];
 function buffOn(k) { return game.buffs[k] > 0; }
+
+// slingshot: while its buff is active you auto-fling carried wood (ammo) at the nearest
+// shade in range — a ranged way to thin a wave before it reaches the fire, at the cost
+// of the fuel that wood would have become.
+var SLING_RANGE = 235, SLING_SPEED = 540, SLING_DMG = 8, SLING_CD = 0.4;
 
 var game = {
   state: 'title', time: 0, fuel: 65, warmth: 100, bank: 0, carry: 0,
@@ -462,7 +485,7 @@ function computeScore() {
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0, prevPhase: 0 };
-var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [], floaters = [];
+var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [], floaters = [], projs = [], groundWood = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
 
 // floating reward text ("+2", "CRIT", "🔥 +18", buff names) — instant, visible payoff
@@ -500,9 +523,10 @@ function spawnShade(hpMul, spdMul, kind) {
   else { x = BOUND.x1 + m; y = rand(BOUND.y0, BOUND.y1); }                   // right
   kind = kind || 'shade';
   var hp, r, spd, bite;
-  if (kind === 'brute') { hp = 10 * hpMul; r = 19; spd = rand(15, 22) * spdMul; bite = 7; }   // slow, tanky, hits hard
+  if (kind === 'brute') { hp = 10 * hpMul; r = 19; spd = rand(15, 22) * spdMul; bite = 7; }        // slow, tanky, hits the fire hard
+  else if (kind === 'irregular') { hp = 6 * hpMul; r = 13; spd = rand(44, 58) * spdMul; bite = 0; } // hunts the player; torch can't kill it
   else { hp = 3 * hpMul; r = 12; spd = rand(26, 40) * spdMul; bite = 4; }
-  shades.push({ x: x, y: y, r: r, hp: hp, maxHp: hp, spd: spd, biteCd: 0, wob: rand(0, TAU()), hitFlash: 0, kind: kind, bite: bite });
+  shades.push({ x: x, y: y, r: r, hp: hp, maxHp: hp, spd: spd, biteCd: 0, playerBiteCd: 0, wob: rand(0, TAU()), hitFlash: 0, kind: kind, bite: bite });
 }
 function addParticles(x, y, n, color, spd, life, sz) {
   for (var i = 0; i < n; i++) {
@@ -525,6 +549,7 @@ function collectDrop(d) {
     triggerFlare(fireRadius() * 2.4, 40);            // instant screen-clearing blast
     for (var i = 0; i < shades.length; i++) { shades[i].hp -= 40; shades[i].hitFlash = 0.2; }
     game.flash = Math.max(game.flash, 0.5); game.shake = Math.max(game.shake, 10);
+    game.blueFire = 5;                               // the blast burns the fire blue-hot for a moment
   } else if (d.type === 'toolbelt') {
     game.mods.carry = (game.mods.carry || 0) + 2;    // permanent bigger pack
     UI.flashCarry();
@@ -543,14 +568,26 @@ function updateDrops(dt) {
   for (var k in game.buffs) { if (game.buffs[k] > 0) { game.buffs[k] -= dt; if (game.buffs[k] <= 0) game.buffs[k] = 0; } }
 }
 
+// dropped wood (knocked loose by irregulars) can be walked over to reclaim, if the pack has room
+function updateGroundWood(dt) {
+  var cap = carryCap();
+  for (var i = groundWood.length - 1; i >= 0; i--) {
+    var w = groundWood[i]; w.life -= dt; w.bob += dt * 3; if (w.grab > 0) w.grab -= dt;
+    if (w.grab <= 0 && game.carry < cap && dist2(w.x, w.y, survivor.x, survivor.y) < Math.pow(survivor.r + 18, 2)) {
+      game.carry++; groundWood.splice(i, 1); Audio2.wood(); addFloater(w.x, w.y, '+1', '#ffd9a0'); UI.flashCarry(); UI.syncDock(); continue;
+    }
+    if (w.life <= 0) groundWood.splice(i, 1);
+  }
+}
+
 function startGame() {
   game.state = 'play'; game.time = 0;
   game.fuel = 65; game.warmth = 100; game.carry = 0;
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
-  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; game.dumpFlash = 0;
-  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false;
+  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -566,7 +603,7 @@ function endGame(win) {
   game.isBest = game.lastScore > best;
   game.bestScore = game.isBest ? game.lastScore : best;
   if (game.isBest) saveBest(game.lastScore);
-  shades.length = 0; drops.length = 0; floaters.length = 0; game.combo = 0;   // clear the stage for the end scene
+  shades.length = 0; drops.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.combo = 0;   // clear the stage for the end scene
   if (win) { game.fuel = CFG.fuelMax; game.buffs = {}; }  // a roaring victory fire
   if (win) Audio2.win(); else Audio2.lose();
   UI.showResult(win);
@@ -581,7 +618,7 @@ function continueEndless() {
   game.fuel = clamp(game.fuel, 55, CFG.fuelCap); game.warmth = CFG.warmthMax; game.buffs = {};
   game.endT = 0; game.nightSpawnAcc = 0; game.combo = 0; game.comboT = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
-  shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0;
+  shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0; projs.length = 0; groundWood.length = 0;
   var living = 0; for (var i = 0; i < trees.length; i++) if (!trees[i].felling) living++;
   for (var s = living; s < 6; s++) spawnTree();
   spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType());
@@ -595,7 +632,7 @@ function startLevelUp() {
   game.boons = [];
   for (var i = 0; i < 3 && pool.length; i++) game.boons.push(pool.splice(Math.floor(rand(0, pool.length)), 1)[0]);
   game.state = 'levelup';
-  floaters.length = 0; game.combo = 0;
+  floaters.length = 0; projs.length = 0; groundWood.length = 0; game.combo = 0;
   Audio2.dawn();
   UI.showLevelUp();
 }
@@ -636,10 +673,16 @@ function update(dt) {
   } else {
     var hpMul = 1 + (game.night - 1) * 0.7, spdMul = 1 + (game.night - 1) * 0.12;
     var ratePerSec = Math.min(0.3 + game.night * 0.24, 3.4);            // capped so endless waves stay renderable
-    var bruteChance = game.night >= 3 ? Math.min(0.15 + (game.night - 3) * 0.1, 0.55) : 0;
+    var bruteChance = game.night >= 3 ? Math.min(0.15 + (game.night - 3) * 0.1, 0.5) : 0;
+    var irregChance = game.night >= 3 ? Math.min(0.1 + (game.night - 3) * 0.035, 0.22) : 0;   // player-hunting irregulars (from night 3)
     game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
     while (game.nightSpawnAcc >= 1) {
-      if (shades.length < 72) spawnShade(hpMul, spdMul, Math.random() < bruteChance ? 'brute' : 'shade');   // soft cap
+      if (shades.length < 72) {   // soft cap keeps late endless waves renderable
+        var roll = Math.random(), kind = 'shade';
+        if (roll < bruteChance) kind = 'brute';
+        else if (roll < bruteChance + irregChance) kind = 'irregular';
+        spawnShade(hpMul, spdMul, kind);
+      }
       game.nightSpawnAcc -= 1;
     }
     if (game.phaseTime <= 0) {
@@ -652,6 +695,8 @@ function update(dt) {
   }
   // combo streak fades if you stop acting
   if (game.comboT > 0) { game.comboT -= dt; if (game.comboT <= 0) { game.comboT = 0; game.combo = 0; } }
+  if (game.biteFloatCd > 0) game.biteFloatCd -= dt;   // throttles the fire-drain popup
+  if (game.blueFire > 0) game.blueFire -= dt;         // Nova's temporary blue-hot fire
   // floating reward text rises + fades
   for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
 
@@ -772,7 +817,8 @@ function update(dt) {
       for (var bi = 0; bi < shades.length; bi++) {
         var bs = shades[bi], bdd = Math.hypot(bs.x - survivor.x, bs.y - survivor.y);
         if (bdd < bs.r + survivor.r + 24) {
-          bs.hp -= bashDmg; bs.hitFlash = 0.15;
+          if (bs.kind !== 'irregular') bs.hp -= bashDmg;   // irregulars shrug off the torch — slingshot or fire only
+          bs.hitFlash = 0.15;
           var kx = (bs.x - survivor.x) / (bdd || 1), ky = (bs.y - survivor.y) / (bdd || 1);
           bs.x += kx * 48; bs.y += ky * 48;
         }
@@ -797,6 +843,38 @@ function update(dt) {
     Audio2.dump();
     UI.syncDock();
   }
+
+  // SLINGSHOT: while its buff is active, auto-fling carried wood at the nearest shade in
+  // range — a ranged defense that spends the wood you'd otherwise feed to the fire.
+  game.slingCd = (game.slingCd || 0) - dt;
+  if (buffOn('sling') && game.carry > 0 && game.slingCd <= 0) {
+    var stgt = null, std = SLING_RANGE * SLING_RANGE;
+    for (var pi2 = 0; pi2 < shades.length; pi2++) { var pdd = dist2(survivor.x, survivor.y, shades[pi2].x, shades[pi2].y); if (pdd < std) { std = pdd; stgt = shades[pi2]; } }
+    if (stgt) {
+      game.carry--; game.slingCd = SLING_CD;
+      var sa = Math.atan2(stgt.y - survivor.y, stgt.x - survivor.x);
+      projs.push({ x: survivor.x + Math.cos(sa) * 14, y: survivor.y + Math.sin(sa) * 14, vx: Math.cos(sa) * SLING_SPEED, vy: Math.sin(sa) * SLING_SPEED, life: 1.1 });
+      if (!survivor.moving) survivor.face = sa;
+      Audio2.sling(); UI.syncDock();
+    }
+  }
+  // advance slingshot projectiles: hit the first shade they touch (damage + knockback);
+  // the kill itself is scored centrally in the shade loop below
+  for (var pj = projs.length - 1; pj >= 0; pj--) {
+    var prj = projs[pj]; prj.x += prj.vx * dt; prj.y += prj.vy * dt; prj.life -= dt;
+    var phit = false;
+    for (var ph = 0; ph < shades.length; ph++) {
+      var psh = shades[ph];
+      if (dist2(prj.x, prj.y, psh.x, psh.y) < Math.pow(psh.r + 11, 2)) {
+        psh.hp -= SLING_DMG; psh.hitFlash = 0.16;
+        var ka = Math.atan2(psh.y - prj.y, psh.x - prj.x); psh.x += Math.cos(ka) * 34; psh.y += Math.sin(ka) * 34;
+        addParticles(prj.x, prj.y, 9, '#d8a468', 130, 0.4, 3); Audio2.sizzle();
+        phit = true; break;
+      }
+    }
+    if (phit || prj.life <= 0 || prj.x < BOUND.x0 - 60 || prj.x > BOUND.x1 + 60 || prj.y < BOUND.y0 - 60 || prj.y > BOUND.y1 + 60) projs.splice(pj, 1);
+  }
+
   // advance toppling trees, then remove them when the animation finishes
   var living = 0;
   for (var fi = trees.length - 1; fi >= 0; fi--) {
@@ -820,22 +898,49 @@ function update(dt) {
   var R = fireRadius(), dps = burnDps(), anyBurning = false;
   for (var j = shades.length - 1; j >= 0; j--) {
     var s = shades[j]; s.wob += dt * 4; s.burning = false;
-    var toFx = CFG.fireX - s.x, toFy = CFG.fireY - s.y, fd = Math.hypot(toFx, toFy) || 1;
-    s.x += (toFx / fd) * s.spd * dt + Math.cos(s.wob) * 8 * dt;
-    s.y += (toFy / fd) * s.spd * dt + Math.sin(s.wob) * 8 * dt;
+    var toFx = CFG.fireX - s.x, toFy = CFG.fireY - s.y, fd = Math.hypot(toFx, toFy) || 1;   // vector to the fire (burn/bite)
+    // irregulars hunt the player; ordinary shades and brutes march on the fire
+    var mtx = s.kind === 'irregular' ? (survivor.x - s.x) : toFx;
+    var mty = s.kind === 'irregular' ? (survivor.y - s.y) : toFy;
+    var md = Math.hypot(mtx, mty) || 1;
+    s.x += (mtx / md) * s.spd * dt + Math.cos(s.wob) * 8 * dt;
+    s.y += (mty / md) * s.spd * dt + Math.sin(s.wob) * 8 * dt;
     if (s.hitFlash > 0) s.hitFlash -= dt;
-    if (fd < R) {
-      var burn = dps * (0.4 + fireIntensity() * 0.8) * (1 - fd / R + 0.25) * dt;
+    if (fd < R) {   // the firelight burns any shade — the only kill for an irregular besides the slingshot
+      var burn = dps * (0.4 + fireIntensity() * 0.8) * (1 - fd / R + 0.25) * dt * (s.kind === 'irregular' ? 1.5 : 1);
       s.hp -= burn; s.burning = true; anyBurning = true;
       if (Math.random() < dt * 18) addParticles(s.x, s.y, 1, '#ff9d3a', 55, 0.35, 2); // singe embers
     }
-    if (dist2(s.x, s.y, survivor.x, survivor.y) < Math.pow(s.r + survivor.r, 2)) {
-      game.warmth = clamp(game.warmth - 24 * dt, 0, CFG.warmthMax);
-      survivor.x -= (toFx / fd) * 40 * dt; survivor.y -= (toFy / fd) * 40 * dt;
+    var pdx = s.x - survivor.x, pdy = s.y - survivor.y, pdd2 = pdx * pdx + pdy * pdy;
+    if (pdd2 < Math.pow(s.r + survivor.r, 2)) {
+      var pd = Math.sqrt(pdd2) || 1;
+      if (s.kind === 'irregular') {
+        // each hit knocks a log out of your pack (wood is both your fuel and your sling ammo)
+        survivor.x += (pdx / pd) * 46 * dt; survivor.y += (pdy / pd) * 46 * dt;
+        s.playerBiteCd -= dt;
+        if (s.playerBiteCd <= 0) {
+          s.playerBiteCd = 0.9;
+          game.warmth = clamp(game.warmth - 6, 0, CFG.warmthMax);
+          game.shake = Math.max(game.shake, 5); Audio2.bite();
+          if (game.carry > 0) {
+            game.carry--;
+            groundWood.push({ x: survivor.x + rand(-20, 20), y: survivor.y + rand(-20, 20), life: 11, grab: 0.7, bob: rand(0, TAU()) });
+            addFloater(survivor.x, survivor.y - 14, '🪵 −1', '#ff9d6a', true); UI.syncDock();
+          }
+        }
+      } else {
+        game.warmth = clamp(game.warmth - 24 * dt, 0, CFG.warmthMax);
+        survivor.x -= (toFx / fd) * 40 * dt; survivor.y -= (toFy / fd) * 40 * dt;
+      }
     }
-    if (fd < 42) {
+    if (fd < 42 && s.kind !== 'irregular') {
       s.biteCd -= dt;
-      if (s.biteCd <= 0) { s.biteCd = 0.6; game.fuel = clamp(game.fuel - (s.bite || 4), 0, CFG.fuelMax + 40); game.shake = Math.max(game.shake, s.kind === 'brute' ? 10 : 6); addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3); Audio2.bite(); UI.syncDock(); }
+      if (s.biteCd <= 0) {
+        s.biteCd = 0.6; game.fuel = clamp(game.fuel - (s.bite || 4), 0, CFG.fuelMax + 40);
+        game.shake = Math.max(game.shake, s.kind === 'brute' ? 10 : 6);
+        addParticles(CFG.fireX, CFG.fireY, 6, '#7a5cff', 80, 0.4, 3); Audio2.bite(); UI.syncDock();
+        if (game.biteFloatCd <= 0) { addFloater(CFG.fireX, CFG.fireY - 12, '🔥 −' + (s.bite || 4), '#ff6a6a', true); game.biteFloatCd = 0.45; }
+      }
     }
     if (s.hp <= 0) {
       shades.splice(j, 1); game.shadesBurned++;
@@ -861,6 +966,7 @@ function update(dt) {
   }
   updateParticles(dt);
   updateDrops(dt);
+  updateGroundWood(dt);
   game._uiAcc = (game._uiAcc || 0) + dt;
   if (game._uiAcc > 0.25) { game._uiAcc = 0; UI.syncDock(); }
   if (game.banner) { game.banner.t -= dt; if (game.banner.t <= 0) game.banner = null; }
@@ -914,13 +1020,19 @@ function projectToStage(gx, gy, wy) {
 function renderScene(dt) {
   var t = game.time;
   var it = fireIntensity();
+  // deeper nights (and the Nova drop) burn the fire hotter — a shift to intense blue-white
+  var heatTier = clamp((game.night - 3) / 10, 0, 1);
+  var novaBlue = clamp((game.blueFire || 0) / 5, 0, 1);
+  var blue = (game.state === 'win' || game.state === 'over') ? 0 : clamp(Math.max(heatTier, novaBlue), 0, 1);
 
   // fire flame + light scale with fuel
   var flick = 1 + Math.sin(t * 14) * 0.07 + Math.sin(t * 27) * 0.05 + (Math.random() - 0.5) * 0.05;
+  flick += blue * (Math.sin(t * 34) * 0.06 + (Math.random() - 0.5) * 0.06);   // hotter fire flickers faster/harder
   // light scales hard with fuel: a dying fire throws a small, dim pool
-  fireLight.intensity = (0.35 + it * 7.2) * flick;
+  fireLight.intensity = (0.35 + it * 7.2) * flick * (1 + blue * 0.3);
   fireLight.distance = 3.0 + it * 10.5;
   fireLight.position.x = Math.sin(t * 9) * 0.06;
+  fireLight.color.setRGB(lerp(1.0, 0.42, blue), lerp(0.54, 0.7, blue), lerp(0.23, 1.0, blue));
   // the whole world darkens as the fire fails (with a readable floor)
   ambient.intensity = 0.24 + it * 0.34;
   moonLight.intensity = 0.28 + it * 0.14;
@@ -962,6 +1074,7 @@ function renderScene(dt) {
   rangeRing.visible = playing; bankRing.visible = playing;   // gameplay guides only while playing
   var fs = 0.32 + it * 1.05;
   fs *= (1 + (game.dumpFlash || 0) * 0.45);                               // flares up as wood lands
+  fs *= (1 + blue * 0.25);                                                // taller, more intense when blue-hot
   if (game.state === 'over') fs *= (1 - clamp(game.endT / 2.0, 0, 1));   // fire guttering out on a loss
   else if (game.state === 'win') fs *= 1.15;                              // roaring on a win
   flameOuter.scale.set(fs, fs * flick, fs); flameOuter.position.y = 0.18 + fs * 0.72;
@@ -970,6 +1083,12 @@ function renderScene(dt) {
   flameCore.visible = it > 0.35 || game.state === 'win';
   coals.material.opacity = (0.45 + it * 0.5) * (game.state === 'over' ? (1 - clamp(game.endT / 2.5, 0, 1)) : 1);
   var cs = 0.6 + it * 0.5; coals.scale.set(cs, cs, cs);
+  // colour the fire: orange when cool, blue-white when it runs hot (deep nights / Nova)
+  flameOuter.material.color.setRGB(lerp(1.0, 0.16, blue), lerp(0.35, 0.44, blue), lerp(0.12, 1.0, blue));
+  flameMid.material.color.setRGB(lerp(1.0, 0.38, blue), lerp(0.67, 0.66, blue), lerp(0.23, 1.0, blue));
+  flameCore.material.color.setRGB(lerp(1.0, 0.85, blue), lerp(0.91, 0.94, blue), lerp(0.66, 1.0, blue));
+  coals.material.color.setRGB(lerp(1.0, 0.29, blue), lerp(0.42, 0.55, blue), lerp(0.16, 1.0, blue));
+  embers.material.color.setRGB(lerp(1.0, 0.54, blue), lerp(0.77, 0.75, blue), lerp(0.42, 1.0, blue));
 
   // fire embers
   for (var e = 0; e < EMB; e++) {
@@ -1083,13 +1202,14 @@ function renderScene(dt) {
     sg.lookAt(0, by, 0);
     var ud = sg.userData;
     var isBrute = sh.kind === 'brute';
+    var isIrr = sh.kind === 'irregular';
     if (sh.hitFlash > 0) { ud.body.material.emissive.setHex(0xffffff); ud.body.material.color.setHex(0xffffff); }
     else {
       // ease a "burning" glow: shade colour -> hot orange while inside the firelight
       sh.glow = lerp(sh.glow || 0, sh.burning ? 1 : 0, Math.min(1, dt * 8));
       var gG = sh.glow;
-      var eR = isBrute ? 0.6 : 0.23, eG = isBrute ? 0.12 : 0.14, eB = isBrute ? 0.18 : 0.47;
-      var cR = isBrute ? 0.62 : 0.32, cG = isBrute ? 0.16 : 0.25, cB = isBrute ? 0.34 : 0.63;
+      var eR = isBrute ? 0.6 : isIrr ? 0.06 : 0.23, eG = isBrute ? 0.12 : isIrr ? 0.55 : 0.14, eB = isBrute ? 0.18 : isIrr ? 0.5 : 0.47;
+      var cR = isBrute ? 0.62 : isIrr ? 0.13 : 0.32, cG = isBrute ? 0.16 : isIrr ? 0.82 : 0.25, cB = isBrute ? 0.34 : isIrr ? 0.72 : 0.63;
       ud.body.material.emissive.setRGB(lerp(eR, 1.0, gG), lerp(eG, 0.42, gG), lerp(eB, 0.05, gG));
       ud.body.material.color.setRGB(lerp(cR, 1.0, gG), lerp(cG, 0.5, gG), lerp(cB, 0.2, gG));
     }
@@ -1124,6 +1244,27 @@ function renderScene(dt) {
     tm.visible = to.t >= 0;
   }
   tossMap.forEach(function (tm, to) { if (!seenTo.has(to)) { scene.remove(tm); disposeGroup(tm); tossMap.delete(to); } });
+
+  // slingshot projectiles — spinning wood chunks in flight
+  var seenP = new Set();
+  for (var ppi = 0; ppi < projs.length; ppi++) {
+    var pp = projs[ppi]; seenP.add(pp);
+    var pm = projMap.get(pp); if (!pm) { pm = buildProj(); projMap.set(pp, pm); }
+    pm.position.set(wx(pp.x), 0.5, wz(pp.y));
+    pm.rotation.x += dt * 18; pm.rotation.y += dt * 14;
+  }
+  projMap.forEach(function (pm, pp) { if (!seenP.has(pp)) { scene.remove(pm); disposeGroup(pm); projMap.delete(pp); } });
+
+  // dropped wood on the ground (knocked loose by irregulars) — walk over to reclaim
+  var seenGW = new Set();
+  for (var gwi = 0; gwi < groundWood.length; gwi++) {
+    var gw = groundWood[gwi]; seenGW.add(gw);
+    var gm = groundWoodMap.get(gw); if (!gm) { gm = buildGroundWood(); groundWoodMap.set(gw, gm); }
+    gm.position.set(wx(gw.x), 0.14 + Math.sin(gw.bob) * 0.04, wz(gw.y));
+    gm.rotation.y += dt * 1.4;
+    gm.visible = gw.life > 2.5 ? true : (Math.sin(t * 16) > -0.2);   // blink out near expiry
+  }
+  groundWoodMap.forEach(function (gm, gw) { if (!seenGW.has(gw)) { scene.remove(gm); disposeGroup(gm); groundWoodMap.delete(gw); } });
 
   // ground-plane particles
   var pn = Math.min(particles.length, PMAX);
@@ -1246,8 +1387,9 @@ var UI = (function () {
     legend.appendChild(legendRow('#ff8a2b', 'The fire — keep it fed'));
     legend.appendChild(legendRow('#4f9a56', 'Pines — walk into them to gather wood'));
     legend.appendChild(legendRow('#8f79ff', 'Shades — drain the fire at night'));
+    legend.appendChild(legendRow('#35d6c0', 'Irregulars — hunt you; sling them or lead them to fire'));
     legend.appendChild(legendRow('#ffd24a', 'Glowing drops — grab them for powers'));
-    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood, then return to the fire — the wood feeds it and it burns brighter. Spend fire to buy upgrades. Swing your torch at shades to beat them back. Grab glowing drops for powers. Survive 5 nights.');
+    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood, then return to the fire — the wood feeds it and it burns brighter. Spend fire to buy upgrades. Swing your torch at shades to beat them back; grab the 🎯 Slingshot to fling wood at them from afar. Grab glowing drops for powers. Survive 5 nights — then keep the fire burning as long as you can.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
     var best = loadBest();
     var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;
@@ -1387,7 +1529,7 @@ requestAnimationFrame(frame);
 
 // debug hook for the headless harness
 window.__EMBER = {
-  game: game, survivor: survivor, trees: trees, shades: shades, drops: drops, input: input,
+  game: game, survivor: survivor, trees: trees, shades: shades, drops: drops, projs: projs, groundWood: groundWood, input: input,
   cfg: CFG, upgrades: UPGRADES, buffs: BUFFS, buy: buyUpgrade, start: startGame, pick: pickBoon,
   step: function (dt) { update(dt); }, cost: function (k) { return upgradeCost(UPGRADES[k]); },
   fireRadius: fireRadius, carryCap: carryCap, endless: continueEndless
