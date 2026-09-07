@@ -215,7 +215,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedPerLog: 4.4, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
+  feedPerLog: 3.8, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -276,7 +276,7 @@ resize();
 // lights: dim cold ambient so shadows read as blue-black, plus the fire
 var ambient = new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.5);
 scene.add(ambient);
-var fireLight = new THREE.PointLight(0xff8a3a, 6, 20, 2);
+var fireLight = new THREE.PointLight(0xff8a3a, 6, 40, 1.5);   // lower decay + longer reach so a healthy fire lights the whole frame
 fireLight.position.set(0, 1.2, 0);
 fireLight.castShadow = true;
 fireLight.shadow.mapSize.set(1024, 1024);
@@ -617,11 +617,12 @@ var BUFFS = {
   harvest:  { name: 'Harvest',  icon: '🪓', color: 0xffd24a, dur: 14 },
   chainsaw: { name: 'Chainsaw', icon: '🪚', color: 0xff5a6a, dur: 10 },   // rare: one-shots trees
   sling:    { name: 'Slingshot', icon: '🎯', color: 0x9ad0ff, dur: 14 },  // fling carried wood at shades
+  telekinesis: { name: 'Telekinesis', icon: '🌀', color: 0xb98cff, dur: 10 }, // wood flies straight to the fire
   nova:     { name: 'Nova',     icon: '💥', color: 0xffe08a, dur: 0 },    // instant blast
   toolbelt: { name: 'Toolbelt', icon: '🧰', color: 0xc98a4a, dur: 0 }     // instant, permanent +2 carry
 };
-// inferno/swift/harvest common; sling/ward/nova mid; chainsaw/toolbelt rare (1 each)
-var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'sling', 'sling', 'nova', 'chainsaw', 'toolbelt'];
+// inferno/swift/harvest common; sling/telekinesis/ward/nova mid; chainsaw/toolbelt rare
+var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'sling', 'sling', 'telekinesis', 'telekinesis', 'nova', 'chainsaw', 'toolbelt'];
 function buffOn(k) { return game.buffs[k] > 0; }
 
 // slingshot: while its buff is active you auto-fling carried wood (ammo) at the nearest
@@ -690,9 +691,14 @@ function moveSpeed() { return CFG.survivorSpeed * (1 + (game.mods.speed || 0)) *
 function gatherTime() { return CFG.gatherTime * (game.mods.chop || 1) * (buffOn('harvest') ? 0.5 : 1); }
 
 function spawnTree() {
-  // anywhere on the visible frame, off the fire/bank zone, not overlapping another tree
-  for (var tries = 0; tries < 30; tries++) {
-    var x = rand(BOUND.x0 + 22, BOUND.x1 - 22), y = rand(BOUND.y0 + 22, BOUND.y1 - 22);
+  // spawn in a ring around the fire, biased toward the near side so wood stays reachable
+  // (still spread across the frame), off the fire/bank zone, not overlapping another tree
+  var maxR = Math.min(BOUND.x1 - BOUND.x0, BOUND.y1 - BOUND.y0) * 0.5 - 24;
+  for (var tries = 0; tries < 40; tries++) {
+    var ang = rand(0, TAU());
+    var rr = 96 + Math.pow(Math.random(), 1.7) * Math.max(70, maxR - 96);   // pow<1 skew -> closer to the fire
+    var x = clamp(CFG.fireX + Math.cos(ang) * rr, BOUND.x0 + 22, BOUND.x1 - 22);
+    var y = clamp(CFG.fireY + Math.sin(ang) * rr, BOUND.y0 + 22, BOUND.y1 - 22);
     if (dist2(x, y, CFG.fireX, CFG.fireY) < 82 * 82) continue;   // not on the fire
     var ok = true;
     for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 46 * 46) { ok = false; break; } }
@@ -775,7 +781,7 @@ function startGame() {
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
-  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -860,12 +866,12 @@ function update(dt) {
     if (game.phaseTime <= 0) { game.phase = 'night'; game.phaseTime = CFG.nightLen; game.nightSpawnAcc = 0; setBanner('NIGHT ' + game.night, 'The dark comes — keep it burning', 2.4); Audio2.night(); }
   } else {
     var hpMul = 1 + (game.night - 1) * 0.7, spdMul = 1 + (game.night - 1) * 0.12;
-    var ratePerSec = Math.min(0.3 + game.night * 0.24, 3.4);            // capped so endless waves stay renderable
+    var ratePerSec = Math.min(0.3 + game.night * 0.26, 5.5);            // denser waves the deeper you go (capped for perf)
     var bruteChance = game.night >= 3 ? Math.min(0.15 + (game.night - 3) * 0.1, 0.5) : 0;
     var irregChance = game.night >= 3 ? Math.min(0.1 + (game.night - 3) * 0.035, 0.22) : 0;   // player-hunting irregulars (from night 3)
     game.nightSpawnAcc = (game.nightSpawnAcc || 0) + dt * ratePerSec;
     while (game.nightSpawnAcc >= 1) {
-      if (shades.length < 72) {   // soft cap keeps late endless waves renderable
+      if (shades.length < 100) {   // soft cap keeps late endless waves renderable
         var roll = Math.random(), kind = 'shade';
         if (roll < bruteChance) kind = 'brute';
         else if (roll < bruteChance + irregChance) kind = 'irregular';
@@ -888,7 +894,7 @@ function update(dt) {
   // floating reward text rises + fades
   for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
 
-  var decay = 1.2 + game.night * 0.34 + (game.phase === 'night' ? 1.5 : 0);
+  var decay = 1.3 + game.night * 0.37 + (game.phase === 'night' ? 1.7 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
   game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
@@ -921,7 +927,7 @@ function update(dt) {
   var warmthRate;
   if (litByFire) warmthRate = 22;
   else if (buffOn('ward')) warmthRate = 0;   // Ward: immune to the cold
-  else { var coldBase = 5 + game.night * 0.7 + (game.phase === 'night' ? 2 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
+  else { var coldBase = 6 + game.night * 0.9 + (game.phase === 'night' ? 2.5 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
   survivor.chill = 1 - game.warmth / CFG.warmthMax;
   if (game.warmth <= 0) { endGame(false); return; }
@@ -1045,6 +1051,16 @@ function update(dt) {
       if (!survivor.moving) survivor.face = sa;
       Audio2.sling(); UI.syncDock();
     }
+  }
+  // TELEKINESIS: carried wood flies straight to the fire wherever you are — no trip back
+  game.tkCd = (game.tkCd || 0) - dt;
+  if (buffOn('telekinesis') && game.carry > 0 && game.tkCd <= 0) {
+    game.tkCd = 0.28;
+    var tkN = game.carry; game.carry = 0;
+    var tkPre = game.fuel; game.fuel = clamp(game.fuel + tkN * CFG.feedPerLog, 0, CFG.fuelCap);
+    for (var tki = 0; tki < Math.min(tkN, 10); tki++) tosses.push({ x: survivor.x + rand(-10, 10), y: survivor.y + rand(-10, 10), t: -tki * 0.04, dur: 0.45 });
+    addFloater(CFG.fireX, CFG.fireY - 24, '🔥 +' + Math.round(game.fuel - tkPre), '#c9a6ff', true);
+    game.dumpFlash = Math.max(game.dumpFlash || 0, 0.5); Audio2.dump(); UI.syncDock();
   }
   // advance slingshot projectiles: hit the first shade they touch (damage + knockback);
   // the kill itself is scored centrally in the shade loop below
@@ -1217,13 +1233,13 @@ function renderScene(dt) {
   var flick = 1 + Math.sin(t * 14) * 0.07 + Math.sin(t * 27) * 0.05 + (Math.random() - 0.5) * 0.05;
   flick += blue * (Math.sin(t * 34) * 0.06 + (Math.random() - 0.5) * 0.06);   // hotter fire flickers faster/harder
   // light scales hard with fuel: a dying fire throws a small, dim pool
-  fireLight.intensity = (0.35 + it * 7.2) * flick * (1 + blue * 0.3);
-  fireLight.distance = 3.0 + it * 10.5;
+  fireLight.intensity = (0.5 + it * 8.5) * flick * (1 + blue * 0.3);
+  fireLight.distance = 8.0 + it * 24;                         // reaches the top of the frame at a healthy fuel level
   fireLight.position.x = Math.sin(t * 9) * 0.06;
   fireLight.color.setRGB(lerp(1.0, 0.42, blue), lerp(0.54, 0.7, blue), lerp(0.23, 1.0, blue));
   // the whole world darkens as the fire fails (with a readable floor)
-  ambient.intensity = 0.24 + it * 0.34;
-  moonLight.intensity = 0.28 + it * 0.14;
+  ambient.intensity = 0.3 + it * 0.4;
+  moonLight.intensity = 0.4 + it * 0.2;
 
   // end-of-round mood: sunrise on a win, the dark swallowing everything on a loss
   if (game.state === 'win') {
@@ -1569,15 +1585,12 @@ var UI = (function () {
   function legendRow(color, text) { var r = el('div', 'row'); var d = el('span', 'dot'); d.style.background = color; r.appendChild(d); r.appendChild(el('span', null, text)); return r; }
   function showTitle() {
     var h = el('h1', null, 'EMBER');
-    var p = el('p', null, 'Your fire is your light, your warmth, your wealth, and your only weapon. Feed it, and it burns the dark back. Neglect it, and the dark takes you.');
+    var p = el('p', null, 'Your fire is your light, warmth, wealth, and only weapon. Feed it, or the dark takes you.');
     var legend = el('div', 'legend');
-    legend.appendChild(legendRow('#ffca57', 'You — carry a torch, chop wood'));
-    legend.appendChild(legendRow('#ff8a2b', 'The fire — keep it fed'));
-    legend.appendChild(legendRow('#4f9a56', 'Pines — walk into them to gather wood'));
-    legend.appendChild(legendRow('#8f79ff', 'Shades — drain the fire at night'));
-    legend.appendChild(legendRow('#35d6c0', 'Irregulars — hunt you; sling them or lead them to fire'));
-    legend.appendChild(legendRow('#ffd24a', 'Glowing drops — grab them for powers'));
-    var how = el('p', 'hint', 'Drag anywhere to move (or WASD / arrows). Chop pines for wood, then return to the fire — the wood feeds it and it burns brighter. Spend fire to buy upgrades. Swing your torch at shades to beat them back; grab the 🎯 Slingshot to fling wood at them from afar. Grab glowing drops for powers. Survive 5 nights — then keep the fire burning as long as you can.');
+    legend.appendChild(legendRow('#4f9a56', 'Chop pines for wood'));
+    legend.appendChild(legendRow('#ff8a2b', 'Bring it back to feed the fire'));
+    legend.appendChild(legendRow('#8f79ff', 'Fight off the shades each night'));
+    var how = el('p', 'hint', 'Drag anywhere to move. Grab glowing drops for powers. Survive.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
     var best = loadBest();
     var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;

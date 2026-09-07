@@ -62,6 +62,14 @@ const server = http.createServer((req, res) => {
     r.irrTorchImmune = E.shades.length > 0 && E.shades[0].hp > irrHp0 - 1;  // torch barely dents it (only knockback)
     r.irrStoleWood = minCarry < carryBefore || everGW;
 
+    // --- TELEKINESIS: carried wood flies to the fire wherever you are (no bank trip)
+    E.game.buffs = {}; E.trees.length = 0; E.shades.length = 0;
+    E.game.buffs.telekinesis = 10; E.game.carry = 5; E.game.fuel = 40;
+    E.survivor.x = 100; E.survivor.y = 250;   // far from the fire/bank zone
+    const tkFuel0 = E.game.fuel, tkCarry0 = E.game.carry;
+    for (let i = 0; i < 10; i++) { E.survivor.x = 100; E.survivor.y = 250; E.trees.length = 0; E.step(dt); }
+    r.telekinesis = E.game.carry < tkCarry0 && E.game.fuel > tkFuel0;   // wood left the pack and fed the fire
+
     // --- IRREGULAR dies to fire: park it on the fire
     E.shades.length = 0;
     E.shades.push({ x: E.cfg.fireX, y: E.cfg.fireY, r: 13, hp: 20, maxHp: 20, spd: 0, biteCd: 0, playerBiteCd: 0, wob: 0, hitFlash: 0, kind: 'irregular', bite: 0 });
@@ -85,7 +93,7 @@ const server = http.createServer((req, res) => {
   await new Promise((r) => server.close(r));
   console.log('features:', JSON.stringify(out, null, 0));
   console.log('errors:', errs.length, errs.slice(0, 5).join(' | '));
-  const ok = !errs.length && out.slingFired && out.slingProjectile && out.slingDamaged && out.irrTorchImmune && out.irrStoleWood && out.irrDiesToFire && out.novaBlue;
+  const ok = !errs.length && out.slingFired && out.slingProjectile && out.slingDamaged && out.telekinesis && out.irrTorchImmune && out.irrStoleWood && out.irrDiesToFire && out.novaBlue;
   if (!ok) console.log('FAILED:', Object.keys(out).filter((k) => out[k] !== true).join(', '));
   console.log('FEATURES OK:', ok);
   process.exit(ok ? 0 : 1);

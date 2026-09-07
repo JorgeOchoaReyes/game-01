@@ -150,6 +150,15 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     **blue-white**, and the Nova drop flashes it blue-hot for a few seconds.
     Tuned so the new threat stays fair (irregulars from night 3, they burn faster
     in the fire): sensible ~4/5, careless a coin-flip, reckless 0/5.
+20. **Reach, readability & density (from playtests).** Trees now spawn biased
+    toward the fire so wood stays reachable at any night; a new **Telekinesis**
+    drop flies your carried wood straight to the fire (no trip back). The fire's
+    light now reaches the **top of the frame** (lower falloff + longer range) so
+    the whole play area reads, not just a small pool. Higher/endless nights spawn
+    **denser waves** (rate + shade caps raised). The title screen was cut down to
+    a three-line how-to. Re-tuned around the easier gathering (closer trees), with
+    cold as the lever that punishes neglect: over 40-game bot cohorts, **sensible
+    88%, careless 75%, reckless 33%** — a clear gradient.
 
 ## Balancing with a bot
 
