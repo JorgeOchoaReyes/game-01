@@ -522,6 +522,9 @@ var BOONS = [
 
 function loadBest() { try { return parseInt(localStorage.getItem('ember_best') || '0', 10) || 0; } catch (e) { return 0; } }
 function saveBest(v) { try { localStorage.setItem('ember_best', String(v)); } catch (e) {} }
+// one-time first-load tutorial: guide the very first tree + first drop-off, then never again
+function tutDone() { try { return localStorage.getItem('ember_tut') === '1'; } catch (e) { return false; } }
+function markTutDone() { try { localStorage.setItem('ember_tut', '1'); } catch (e) {} }
 function computeScore() {
   var nights = game.state === 'win' ? game.night : (game.night - (game.phase === 'dawn' ? 1 : 0));
   return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (game.bonus || 0) + (game.state === 'win' ? 1000 : 0));
@@ -674,6 +677,7 @@ function startGame() {
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
+  game.tut = tutDone() ? 0 : 1;   // step 1: go chop a tree (only the very first time)
   for (var i = 0; i < treeTarget(); i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
@@ -940,7 +944,14 @@ function update(dt) {
     game.dumpFlash = 0.6; game.shake = Math.max(game.shake, 3);
     Audio2.dump();
     UI.syncDock();
+    if (game.tut === 2) {   // first wood delivered — tutorial complete, they're on their own now
+      game.tut = 0; markTutDone();
+      setBanner('NICE!', "That's the loop — keep the fire fed and survive", 3.0);
+      addParticles(CFG.fireX, CFG.fireY, 20, '#8affc1', 150, 0.7, 3);
+    }
   }
+
+  if (game.tut === 1 && game.carry > 0) game.tut = 2;   // chopped the first wood -> now guide them to the fire
 
   // SLINGSHOT: while its buff is active, auto-fling carried wood at the nearest shade in
   // range — a ranged defense that spends the wood you'd otherwise feed to the fire.
@@ -1411,6 +1422,16 @@ function renderScene(dt) {
 
   UI.updateHUD();
   UI.syncFloaters(floaters, projectToStage);
+  // first-load tutorial pointer: aim at the nearest tree, then at the fire
+  if (game.tut && game.state === 'play') {
+    var ttx, tty, ttxt;
+    if (game.tut === 1) {
+      var nt = null, nd = 1e9;
+      for (var ti2 = 0; ti2 < trees.length; ti2++) { if (trees[ti2].felling) continue; var dd = dist2(trees[ti2].x, trees[ti2].y, survivor.x, survivor.y); if (dd < nd) { nd = dd; nt = trees[ti2]; } }
+      ttx = nt ? nt.x : survivor.x; tty = nt ? nt.y : survivor.y; ttxt = '① Walk into a tree to chop wood';
+    } else { ttx = CFG.fireX; tty = CFG.fireY; ttxt = '② Carry the wood back to the fire'; }
+    UI.syncTutorial(projectToStage(ttx, tty, game.tut === 1 ? 1.4 : 1.0), ttxt);
+  } else UI.syncTutorial(null);
   renderer.render(scene, camera);
 }
 function disposeGroup(g) { g.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); }); else o.material.dispose(); } }); }
@@ -1453,6 +1474,18 @@ var UI = (function () {
   // floating reward-text layer (pooled DOM nodes projected from world space)
   var floatWrap = el('div'); floatWrap.id = 'floaters'; stage.appendChild(floatWrap);
   var floatPool = [];
+
+  // first-load tutorial overlay: a bouncing pointer over the target + an instruction line
+  var tutText = el('div', null, ''); tutText.id = 'tuttext'; stage.appendChild(tutText);
+  var tutPtr = el('div', null, '👇'); tutPtr.id = 'tutptr'; stage.appendChild(tutPtr);
+  function syncTutorial(pos, txt) {
+    if (!pos || !pos.vis) { tutText.hidden = true; tutPtr.hidden = true; return; }
+    tutText.hidden = false; tutPtr.hidden = false;
+    if (tutText.textContent !== txt) tutText.textContent = txt;
+    tutPtr.style.left = pos.x + 'px';
+    tutPtr.style.top = pos.y + 'px';
+  }
+
   function syncFloaters(list, project) {
     if (game.state !== 'play') { for (var h = 0; h < floatPool.length; h++) floatPool[h].hidden = true; return; }
     for (var i = 0; i < list.length; i++) {
@@ -1498,7 +1531,7 @@ var UI = (function () {
     screen.innerHTML = ''; nodes.forEach(function (n) { screen.appendChild(n); });
     dock.style.display = 'none'; hud.style.display = 'none';
     // hide transient in-world overlays so they don't ghost behind the menu
-    banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = ''; combo.style.opacity = 0;
+    banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = ''; combo.style.opacity = 0; tutText.hidden = true; tutPtr.hidden = true;
   }
   function legendRow(color, text) { var r = el('div', 'row'); var d = el('span', 'dot'); d.style.background = color; r.appendChild(d); r.appendChild(el('span', null, text)); return r; }
   function showTitle() {
@@ -1634,7 +1667,7 @@ var UI = (function () {
     else stick.style.opacity = 0;
   }
 
-  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, showLevelUp: showLevelUp, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD, syncFloaters: syncFloaters };
+  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, showLevelUp: showLevelUp, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD, syncFloaters: syncFloaters, syncTutorial: syncTutorial };
 })();
 
 // ---------------------------------------------------------------------------

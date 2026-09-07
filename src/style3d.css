@@ -165,6 +165,14 @@ html, body {
 #combo small { display: block; font-size: 11px; font-weight: 800; letter-spacing: 3px; color: #ffb04a; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
 #combo i { display: block; height: 3px; margin: 4px 0 0 auto; width: 66px; background: #ffce54; border-radius: 2px; transform-origin: right; box-shadow: 0 0 6px rgba(255,180,80,0.8); }
 
+/* ---- first-load tutorial ---- */
+@keyframes tutbob { 0%, 100% { transform: translate(-50%, -100%) translateY(0); } 50% { transform: translate(-50%, -100%) translateY(-14px); } }
+#tutptr { position: absolute; font-size: 46px; pointer-events: none; z-index: 6;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.7)); animation: tutbob 0.8s ease-in-out infinite; }
+#tuttext { position: absolute; top: 150px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 6;
+  white-space: nowrap; font-size: 16px; font-weight: 800; color: #fff2df; padding: 8px 18px; border-radius: 22px;
+  background: rgba(20, 12, 24, 0.82); border: 1px solid rgba(255,180,90,0.5); box-shadow: 0 0 22px rgba(255,150,60,0.35); }
+
 /* ---- floating reward text ---- */
 #floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .floater { position: absolute; font-weight: 800; font-size: 16px; white-space: nowrap; will-change: transform, top, opacity;

@@ -181,6 +181,13 @@ headless driver for behavior. I never trusted "done" without actually playing it
     pulsing "dawn breaks" badge, and a confetti burst, before you pick your boon. It
     fires on every cleared night (and every night in endless), so progress always
     feels earned and celebrated.
+28. **First-load tutorial (from playtests).** The very first time someone plays, a
+    tiny guided moment teaches the loop: a bouncing pointer and a one-line prompt
+    send them to the nearest tree ("walk into a tree to chop wood"), then to the
+    fire ("carry the wood back to the fire"). The instant they deliver that first
+    wood it finishes with a "nice, that's the loop" beat and never shows again
+    (remembered in localStorage). It only guides the first tree and the first
+    drop-off; after that the player is on their own.
 
 ## Balancing with a bot
 
