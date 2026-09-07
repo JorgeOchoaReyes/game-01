@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1600px; height: 520px; background: transparent; }
+  #mark { width: 1600px; height: 520px; display: flex; align-items: center; justify-content: center; gap: 40px; }
+  .word { font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; font-weight: 800;
+    font-size: 268px; letter-spacing: 18px; line-height: 1;
+    background: linear-gradient(180deg, #ffd24a 0%, #ff8a2b 55%, #ff5a1e 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 34px rgba(255,138,43,0.55)); padding-right: 18px; }
+</style></head><body>
+<div id="mark">
+  <svg width="300" height="380" viewBox="0 0 300 380" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="o" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#ff3d0a"/><stop offset="60%" stop-color="#ff6a1e"/><stop offset="100%" stop-color="#ff8a2b"/></linearGradient>
+      <linearGradient id="m" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#ff8a2b"/><stop offset="100%" stop-color="#ffc24a"/></linearGradient>
+      <linearGradient id="c" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#ffd24a"/><stop offset="100%" stop-color="#fff6df"/></linearGradient>
+      <filter id="g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>
+    </defs>
+    <path d="M150 40 C 262 190, 274 300, 150 356 C 26 300, 38 190, 150 40 Z" fill="#ff6a1e" filter="url(#g)" opacity="0.85"/>
+    <path d="M150 34 C 250 176, 264 300, 150 352 C 36 300, 50 176, 150 34 Z" fill="url(#o)"/>
+    <path d="M150 130 C 214 232, 220 300, 150 344 C 80 300, 86 232, 150 130 Z" fill="url(#m)"/>
+    <path d="M150 206 C 190 268, 192 312, 150 340 C 108 312, 110 268, 150 206 Z" fill="url(#c)"/>
+    <circle cx="150" cy="20" r="7" fill="#ffd27a"/><circle cx="122" cy="58" r="5" fill="#ffb45a"/><circle cx="180" cy="52" r="5" fill="#ffc46a"/>
+  </svg>
+  <div class="word">EMBER</div>
+</div>
+</body></html>
