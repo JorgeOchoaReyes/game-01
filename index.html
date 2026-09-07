@@ -157,6 +157,18 @@ html, body {
 .confetti i { position: absolute; top: -22px; width: 9px; height: 15px; border-radius: 2px; animation: conffall linear forwards; }
 @keyframes conffall { 0% { transform: translateY(-22px) rotate(0); opacity: 1; } 100% { transform: translateY(1000px) rotate(760deg); opacity: 0.85; } }
 
+/* ---- momentum combo readout ---- */
+#combo { position: absolute; right: 14px; top: 38%; text-align: right; pointer-events: none; opacity: 0; transition: opacity 0.18s; }
+#combo b { display: block; font-size: 34px; font-weight: 900; color: #ffd24a; line-height: 0.95;
+  text-shadow: 0 0 14px rgba(255,150,50,0.85), 0 2px 4px rgba(0,0,0,0.7); transform-origin: right center; }
+#combo small { display: block; font-size: 11px; font-weight: 800; letter-spacing: 3px; color: #ffb04a; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+#combo i { display: block; height: 3px; margin: 4px 0 0 auto; width: 66px; background: #ffce54; border-radius: 2px; transform-origin: right; box-shadow: 0 0 6px rgba(255,180,80,0.8); }
+
+/* ---- floating reward text ---- */
+#floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.floater { position: absolute; font-weight: 800; font-size: 16px; white-space: nowrap; will-change: transform, top, opacity;
+  text-shadow: 0 2px 5px rgba(0,0,0,0.85), 0 0 10px rgba(0,0,0,0.5); font-variant-numeric: tabular-nums; }
+
 </style>
 </head>
 <body>
@@ -594,8 +606,25 @@ var game = {
   state: 'title', time: 0, fuel: 65, warmth: 100, bank: 0, carry: 0,
   night: 1, phase: 'dawn', phaseTime: CFG.dawnLen, woodPopped: 0, shadesBurned: 0,
   shake: 0, lowFuelWarn: 0, flash: 0, banner: null, tipShown: false, buffs: {}, packFull: false,
-  mods: {}, endT: 0, lastScore: 0, bestScore: 0, isBest: false, boons: []
+  mods: {}, endT: 0, lastScore: 0, bestScore: 0, isBest: false, boons: [],
+  combo: 0, comboT: 0, comboBest: 0, bonus: 0
 };
+
+// Momentum combo: any reward action (chop, crit, kill, feed) keeps a streak alive.
+// It multiplies the style-bonus score and drives a HUD readout + milestone flourishes,
+// so continuous play is continuously rewarded — the core "keep going" hook.
+var COMBO_HOLD = 2.6;
+function comboMult() { return 1 + Math.min(game.combo, 40) * 0.05; }   // up to 3x
+function bumpCombo(n) {
+  game.combo += (n || 1);
+  game.comboT = COMBO_HOLD;
+  if (game.combo > game.comboBest) game.comboBest = game.combo;
+  if (game.combo > 0 && game.combo % 10 === 0) {                        // milestone beat
+    setBanner('COMBO ×' + game.combo + ' 🔥', "You're on fire — keep it going!", 1.5);
+    addParticles(survivor.x, survivor.y, 20, '#ffd24a', 165, 0.6, 3);
+    game.shake = Math.max(game.shake, 5); Audio2.crit();
+  }
+}
 
 // permanent run boons picked between nights (the "level up" beat)
 var BOONS = [
@@ -612,13 +641,19 @@ function loadBest() { try { return parseInt(localStorage.getItem('ember_best') |
 function saveBest(v) { try { localStorage.setItem('ember_best', String(v)); } catch (e) {} }
 function computeScore() {
   var nights = game.state === 'win' ? CFG.nights : (game.night - (game.phase === 'dawn' ? 1 : 0));
-  return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (game.state === 'win' ? 1000 : 0));
+  return Math.max(0, nights * 500 + game.shadesBurned * 20 + game.woodPopped * 5 + (game.bonus || 0) + (game.state === 'win' ? 1000 : 0));
 }
 function setBanner(main, sub, dur) { game.banner = { main: main, sub: sub || '', t: dur || 2.2, max: dur || 2.2 }; }
 
 var survivor = { x: CFG.fireX, y: CFG.fireY + 60, r: 13, face: Math.PI / 2, chill: 0, walk: 0, moving: false, chopping: false, chopT: 0, prevPhase: 0 };
-var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [];
+var trees = [], shades = [], particles = [], flares = [], drops = [], tosses = [], floaters = [];
 var targetTree = null;   // tree currently in gather range (for highlight/progress UI)
+
+// floating reward text ("+2", "CRIT", "🔥 +18", buff names) — instant, visible payoff
+// on every action, anchored to a game-field point and projected to the screen each frame.
+function addFloater(gx, gy, text, color, big) {
+  floaters.push({ x: gx, y: gy, text: text, color: color || '#ffe9a8', t: 0, life: big ? 1.15 : 0.85, big: !!big });
+}
 
 function fireRadius() { return (78 + clamp(game.fuel / CFG.fuelMax, 0, 1) * 120 + UPGRADES.stoke.lvl * 14) * (1 + (game.mods.radius || 0)) * (buffOn('inferno') ? 1.22 : 1); }
 function fireIntensity() { return clamp(game.fuel / CFG.fuelMax, 0, 1); }
@@ -667,7 +702,9 @@ function randomDropType() { return DROP_POOL[Math.floor(rand(0, DROP_POOL.length
 
 function collectDrop(d) {
   var b = BUFFS[d.type];
-  addParticles(d.x, d.y, 20, '#' + b.color.toString(16).padStart(6, '0'), 130, 0.6, 3);
+  var bcol = '#' + b.color.toString(16).padStart(6, '0');
+  addParticles(d.x, d.y, 20, bcol, 130, 0.6, 3);
+  addFloater(d.x, d.y, b.icon + ' ' + b.name.toUpperCase() + (d.type === 'toolbelt' ? ' +2' : d.type === 'nova' ? '!' : ''), bcol, true);
   if (d.type === 'nova') {
     triggerFlare(fireRadius() * 2.4, 40);            // instant screen-clearing blast
     for (var i = 0; i < shades.length; i++) { shades[i].hp -= 40; shades[i].hitFlash = 0.2; }
@@ -696,7 +733,8 @@ function startGame() {
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
-  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; game.dumpFlash = 0;
+  trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; game.dumpFlash = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -712,7 +750,7 @@ function endGame(win) {
   game.isBest = game.lastScore > best;
   game.bestScore = game.isBest ? game.lastScore : best;
   if (game.isBest) saveBest(game.lastScore);
-  shades.length = 0; drops.length = 0;                 // clear the stage for the end scene
+  shades.length = 0; drops.length = 0; floaters.length = 0; game.combo = 0;   // clear the stage for the end scene
   if (win) { game.fuel = CFG.fuelMax; game.buffs = {}; }  // a roaring victory fire
   if (win) Audio2.win(); else Audio2.lose();
   UI.showResult(win);
@@ -724,6 +762,7 @@ function startLevelUp() {
   game.boons = [];
   for (var i = 0; i < 3 && pool.length; i++) game.boons.push(pool.splice(Math.floor(rand(0, pool.length)), 1)[0]);
   game.state = 'levelup';
+  floaters.length = 0; game.combo = 0;
   Audio2.dawn();
   UI.showLevelUp();
 }
@@ -747,6 +786,7 @@ function buyUpgrade(key) {
   game.fuel -= cost; u.lvl++;
   game.shake = Math.max(game.shake, 3);
   Audio2.upgrade(); addParticles(survivor.x, survivor.y, 16, '#8affc1', 120, 0.6, 3);
+  addFloater(survivor.x, survivor.y - 22, u.name + ' Lv' + u.lvl, '#8affc1', true);
   UI.syncDock(); UI.flashBtn(key);
 }
 
@@ -777,6 +817,11 @@ function update(dt) {
       return;
     }
   }
+  // combo streak fades if you stop acting
+  if (game.comboT > 0) { game.comboT -= dt; if (game.comboT <= 0) { game.comboT = 0; game.combo = 0; } }
+  // floating reward text rises + fades
+  for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
+
   var decay = 1.2 + game.night * 0.34 + (game.phase === 'night' ? 1.5 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
@@ -851,6 +896,7 @@ function update(dt) {
       if (take > 0) {
         near.wood -= take; game.carry += take; game.woodPopped += take; near.hit = 0.3;
         addParticles(near.x, near.y, 20, '#d8a468', 180, 0.5, 3);
+        addFloater(near.x, near.y, '🪚 +' + take, '#ff8a6a', true); bumpCombo(take);
         Audio2.chainsaw(); UI.flashCarry();
         if (near.wood <= 0) {
           near.felling = 0.4;
@@ -866,15 +912,18 @@ function update(dt) {
       if (near.chop >= gatherTime()) {
         near.chop = 0; near.wood--; game.carry++; game.woodPopped++;
         near.hit = 0.24;
+        var tickGain = 1, crit = false;
         addParticles(near.x, near.y, 12, '#c98a4a', 145, 0.55, 3);
         if (Math.random() < 0.2 && near.wood > 0 && game.carry < carryCap()) {
-          near.wood--; game.carry++; game.woodPopped++;
+          near.wood--; game.carry++; game.woodPopped++; tickGain++; crit = true;
           addParticles(near.x, near.y, 14, '#ffe08a', 175, 0.6, 3); Audio2.crit();
         } else Audio2.wood();
         if (buffOn('harvest') && near.wood > 0 && game.carry < carryCap()) {
-          near.wood--; game.carry++; game.woodPopped++;
+          near.wood--; game.carry++; game.woodPopped++; tickGain++;
           addParticles(near.x, near.y, 8, '#ffd24a', 120, 0.5, 2);
         }
+        addFloater(near.x, near.y, (crit ? 'CRIT +' : '+') + tickGain, crit ? '#ffe08a' : '#ffd9a0', crit);
+        bumpCombo(tickGain);
         UI.flashCarry();
         if (near.wood <= 0) {
           near.felling = 0.55;
@@ -905,7 +954,9 @@ function update(dt) {
   if (game.carry > 0 && dist2(survivor.x, survivor.y, CFG.fireX, CFG.fireY) < Math.pow(CFG.bankRadius, 2)) {
     var n = game.carry;
     game.carry = 0;
+    var before = game.fuel;
     game.fuel = clamp(game.fuel + n * CFG.feedPerLog, 0, CFG.fuelCap);   // wood feeds the fire directly
+    addFloater(CFG.fireX, CFG.fireY - 24, '🔥 +' + Math.round(game.fuel - before), '#ffd24a', true);
     for (var ti = 0; ti < Math.min(n, 10); ti++) {
       tosses.push({ x: survivor.x + rand(-10, 10), y: survivor.y + rand(-10, 10), t: -ti * 0.05, dur: 0.4 });
     }
@@ -955,11 +1006,15 @@ function update(dt) {
     }
     if (s.hp <= 0) {
       shades.splice(j, 1); game.shadesBurned++;
+      bumpCombo(1);
+      var kb = Math.round((s.kind === 'brute' ? 40 : 15) * comboMult());   // style bonus, scaled by streak
+      game.bonus += kb;
+      addFloater(s.x, s.y, '+' + kb, s.kind === 'brute' ? '#ffb0c0' : '#c0a8ff');
       addParticles(s.x, s.y, 16, '#8f79ff', 120, 0.5, 3);   // soul burst
       addParticles(s.x, s.y, 9, '#ff9d3a', 150, 0.45, 3);   // + fire flash
       Audio2.shadeDie();
-      // ability drops: brutes always drop, shades occasionally
-      if (Math.random() < (s.kind === 'brute' ? 1 : 0.1 + (game.mods.drop || 0))) spawnDrop(s.x, s.y, randomDropType());
+      // ability drops: brutes always drop; shades more often on a hot streak (reward momentum)
+      if (Math.random() < (s.kind === 'brute' ? 1 : 0.1 + (game.mods.drop || 0) + Math.min(game.combo, 15) * 0.005)) spawnDrop(s.x, s.y, randomDropType());
     }
   }
   if (anyBurning && Math.random() < dt * 5) Audio2.sizzle();
@@ -1016,6 +1071,13 @@ function keyboardDir() {
 // Render — sync 3D scene + DOM HUD from game state
 // ---------------------------------------------------------------------------
 var _cq = new THREE.Quaternion();
+// project a game-field point (with a world height) to stage-pixel coordinates for DOM overlays
+var _pv = new THREE.Vector3();
+function projectToStage(gx, gy, wy) {
+  _pv.set(wx(gx), wy || 0.7, wz(gy)); _pv.project(camera);
+  var r = stage.getBoundingClientRect();
+  return { x: (_pv.x * 0.5 + 0.5) * r.width, y: (-_pv.y * 0.5 + 0.5) * r.height, vis: _pv.z < 1 };
+}
 function renderScene(dt) {
   var t = game.time;
   var it = fireIntensity();
@@ -1253,6 +1315,7 @@ function renderScene(dt) {
   camera.lookAt(CAM_LOOK);
 
   UI.updateHUD();
+  UI.syncFloaters(floaters, projectToStage);
   renderer.render(scene, camera);
 }
 function disposeGroup(g) { g.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); }); else o.material.dispose(); } }); }
@@ -1286,6 +1349,32 @@ var UI = (function () {
 
   var buffbar = el('div'); buffbar.id = 'buffs'; stage.appendChild(buffbar);
 
+  // momentum combo readout (right edge, mid-screen) — grows and heats up with the streak
+  var combo = el('div'); combo.id = 'combo';
+  combo.innerHTML = '<b></b><small>COMBO</small><i></i>'; stage.appendChild(combo);
+  var comboNum = combo.querySelector('b'), comboBar = combo.querySelector('i');
+
+  // floating reward-text layer (pooled DOM nodes projected from world space)
+  var floatWrap = el('div'); floatWrap.id = 'floaters'; stage.appendChild(floatWrap);
+  var floatPool = [];
+  function syncFloaters(list, project) {
+    if (game.state !== 'play') { for (var h = 0; h < floatPool.length; h++) floatPool[h].hidden = true; return; }
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i], node = floatPool[i];
+      if (!node) { node = el('div', 'floater'); floatWrap.appendChild(node); floatPool.push(node); }
+      var pos = project(f.x, f.y, 0.85), k = f.t / f.life;
+      if (node._txt !== f.text) { node.textContent = f.text; node._txt = f.text; }
+      node.style.color = f.color;
+      node.style.left = pos.x + 'px';
+      node.style.top = (pos.y - k * 52) + 'px';
+      node.style.opacity = pos.vis ? (k > 0.7 ? (1 - k) / 0.3 : 1) : 0;
+      var pop = 0.6 + 0.4 * Math.min(1, k * 5);
+      node.style.transform = 'translate(-50%,-50%) scale(' + (f.big ? 1.35 : 1) * pop + ')';
+      node.hidden = false;
+    }
+    for (var j = list.length; j < floatPool.length; j++) floatPool[j].hidden = true;
+  }
+
   var banner = el('div'); banner.id = 'banner'; banner.innerHTML = '<div class="main"></div><div class="sub"></div>'; stage.appendChild(banner);
   var bMain = banner.querySelector('.main'), bSub = banner.querySelector('.sub');
   var warn = el('div', null, '⚠ THE FIRE IS DYING — BRING WOOD'); warn.id = 'warn'; stage.appendChild(warn);
@@ -1313,7 +1402,7 @@ var UI = (function () {
     screen.innerHTML = ''; nodes.forEach(function (n) { screen.appendChild(n); });
     dock.style.display = 'none'; hud.style.display = 'none';
     // hide transient in-world overlays so they don't ghost behind the menu
-    banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = '';
+    banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = ''; combo.style.opacity = 0;
   }
   function legendRow(color, text) { var r = el('div', 'row'); var d = el('span', 'dot'); d.style.background = color; r.appendChild(d); r.appendChild(el('span', null, text)); return r; }
   function showTitle() {
@@ -1360,10 +1449,11 @@ var UI = (function () {
     var s1 = el('div', 'stat', 'Nights survived: ' + nights + ' / ' + CFG.nights);
     var s2 = el('div', 'stat', 'Wood gathered: ' + game.woodPopped);
     var s3 = el('div', 'stat', 'Shades burned: ' + game.shadesBurned);
+    var s4 = el('div', 'stat', 'Best combo: ×' + game.comboBest);
     var scoreEl = el('div', 'score', '★ 0');
     var bestBadge = game.isBest ? el('div', 'newbest', '★ NEW BEST!') : el('div', 'stat', 'Best: ' + game.bestScore);
     var btn = el('button', 'big', win ? 'PLAY AGAIN' : 'TRY AGAIN'); btn.addEventListener('click', function () { startGame(); });
-    var nodes = [h, p, s1, s2, s3, scoreEl, bestBadge, btn];
+    var nodes = [h, p, s1, s2, s3, s4, scoreEl, bestBadge, btn];
     if (win) { var conf = el('div', 'confetti'); for (var c = 0; c < 44; c++) { var pc = el('i'); pc.style.left = (Math.random() * 100) + '%'; pc.style.background = ['#ffd24a', '#ff8a2b', '#8affc1', '#5fd0ff', '#ff5a6a'][c % 5]; pc.style.animationDelay = (Math.random() * 1.2) + 's'; pc.style.animationDuration = (1.6 + Math.random() * 1.4) + 's'; conf.appendChild(pc); } nodes.unshift(conf); }
     showScreen(nodes, win ? 'win' : 'lose');
     // score count-up
@@ -1411,6 +1501,15 @@ var UI = (function () {
     warn.style.opacity = game.fuel < 22 ? (0.55 + 0.45 * Math.sin(game.time * 9)) : 0;
     // pack-full nudge (why chopping "does nothing")
     packhint.style.opacity = game.carry >= carryCap() ? (0.7 + 0.3 * Math.sin(game.time * 5)) : 0;
+    // momentum combo readout — appears once a streak is building, heats up as it grows
+    if (game.combo >= 3) {
+      combo.style.opacity = 1;
+      var heat = Math.min(1, game.combo / 25);
+      comboNum.textContent = '×' + game.combo;
+      comboNum.style.transform = 'scale(' + (1 + heat * 0.6) + ')';
+      comboNum.style.color = 'rgb(255,' + Math.round(214 - heat * 96) + ',' + Math.round(74 + heat * 24) + ')';
+      comboBar.style.transform = 'scaleX(' + clamp(game.comboT / COMBO_HOLD, 0, 1) + ')';
+    } else combo.style.opacity = 0;
     // active ability buffs
     var bh = '';
     for (var bk in game.buffs) {
@@ -1429,7 +1528,7 @@ var UI = (function () {
     else stick.style.opacity = 0;
   }
 
-  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, showLevelUp: showLevelUp, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD };
+  return { showScreen: showScreen, showTitle: showTitle, showResult: showResult, showLevelUp: showLevelUp, syncDock: syncDock, flashBtn: flashBtn, flashCarry: flashCarry, updateHUD: updateHUD, syncFloaters: syncFloaters };
 })();
 
 // ---------------------------------------------------------------------------

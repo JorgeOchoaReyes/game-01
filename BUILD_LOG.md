@@ -121,6 +121,15 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     reachable; only the page edge stops you. Trees now spawn across the frame
     and shades enter from its edges. Re-tuned for the larger arena: sensible
     5/5, careless 3/5, reckless 0/5.
+17. **Constant-reward / engagement pass.** Every action now pays out visibly:
+    floating reward text (`+2`, `CRIT +2`, `🔥 +18`, buff names, `Lv up`) rises
+    from the point of each chop, kill, feed, upgrade and pickup. A **momentum
+    combo** ties it together — chops, crits and kills all feed one streak that
+    multiplies a style-bonus score, drives a heating `×N COMBO` HUD readout, and
+    fires a flourish every tenth hit; a hot streak also nudges drop luck, so
+    aggressive play earns more powers. Best-combo and the bonus feed the
+    persistent score chase (shown on the end screen). Re-tuned to keep the
+    gradient: sensible 5/5, careless ~3–5/5, reckless 0/5.
 
 ## Balancing with a bot
 
