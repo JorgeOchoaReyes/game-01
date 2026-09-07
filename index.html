@@ -255,12 +255,12 @@ var _ray = new THREE.Raycaster();
 var _groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 function _hitGround(nx, ny) { _ray.setFromCamera(new THREE.Vector2(nx, ny), camera); var v = new THREE.Vector3(); return _ray.ray.intersectPlane(_groundPlane, v) ? v : null; }
 function computeBounds() {
-  var tl = _hitGround(-0.94, 0.66), tr = _hitGround(0.94, 0.66), bl = _hitGround(-0.94, -0.56), br = _hitGround(0.94, -0.56);
-  var tc = _hitGround(0, 0.66), bc = _hitGround(0, -0.56);
+  var tl = _hitGround(-0.94, 0.7), tr = _hitGround(0.94, 0.7), bl = _hitGround(-0.94, -0.72), br = _hitGround(0.94, -0.72);
+  var tc = _hitGround(0, 0.7), bc = _hitGround(0, -0.72);
   if (!tl || !tr || !bl || !br || !tc || !bc) return;
   var xHalf = Math.min(Math.abs(tr.x), Math.abs(br.x), Math.abs(tl.x), Math.abs(bl.x)) - 0.4; // narrowest, so always on-screen
   BOUND.x0 = CFG.fireX - xHalf / K; BOUND.x1 = CFG.fireX + xHalf / K;
-  BOUND.y0 = CFG.fireY + tc.z / K + 10; BOUND.y1 = CFG.fireY + bc.z / K - 10; // tc.z (far) < bc.z (near)
+  BOUND.y0 = CFG.fireY + tc.z / K + 8; BOUND.y1 = CFG.fireY + bc.z / K - 6; // tc.z (far) < bc.z (near); reach nearly to top & bottom
 }
 
 function resize() {
@@ -276,7 +276,7 @@ resize();
 // lights: dim cold ambient so shadows read as blue-black, plus the fire
 var ambient = new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.5);
 scene.add(ambient);
-var fireLight = new THREE.PointLight(0xff8a3a, 6, 40, 1.5);   // lower decay + longer reach so a healthy fire lights the whole frame
+var fireLight = new THREE.PointLight(0xff8a3a, 6, 46, 1.25);  // lower decay + longer reach so a healthy fire lights the whole frame
 fireLight.position.set(0, 1.2, 0);
 fireLight.castShadow = true;
 fireLight.shadow.mapSize.set(1024, 1024);
@@ -578,14 +578,48 @@ var Audio2 = (function () {
     var g = ac.createGain(); g.gain.value = vol || 0.3;
     src.connect(f); f.connect(g); g.connect(master); src.start(t);
   }
+
+  // --- 8-bit background music (pure synth, no audio files — stays offline) ---
+  var musicOn = false, mGain = null, mStep = 0, mNext = 0, mTimer = null;
+  var M_STEP = 0.17;
+  // a looping minor-key chiptune riff (0 = rest)
+  var M_MEL = [440, 523.3, 659.3, 523.3, 587.3, 523.3, 440, 0, 392, 440, 523.3, 392, 329.6, 392, 293.7, 0];
+  var M_BASS = [110, 0, 110, 0, 87.3, 0, 87.3, 0, 98, 0, 98, 0, 82.4, 0, 110, 0];
+  function mBlip(freq, time, type, vol, dur) {
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, time);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(vol, time + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    o.connect(g); g.connect(mGain); o.start(time); o.stop(time + dur + 0.03);
+  }
+  function mSchedule() {
+    if (!musicOn || !ac) return;
+    while (mNext < ac.currentTime + 0.25) {
+      var mel = M_MEL[mStep % M_MEL.length]; if (mel) mBlip(mel, mNext, 'square', 0.06, M_STEP * 0.9);
+      var bas = M_BASS[mStep % M_BASS.length]; if (bas) mBlip(bas, mNext, 'triangle', 0.1, M_STEP * 1.7);
+      mNext += M_STEP; mStep++;
+    }
+    mTimer = setTimeout(mSchedule, 55);
+  }
+  function startMusic() {
+    if (!enabled) return; ensure(); if (!ac || musicOn) return;
+    musicOn = true;
+    if (!mGain) { mGain = ac.createGain(); mGain.gain.value = 0.5; mGain.connect(master); }
+    mStep = 0; mNext = ac.currentTime + 0.1; mSchedule();
+  }
+  function stopMusic() { musicOn = false; if (mTimer) { clearTimeout(mTimer); mTimer = null; } }
+
   return {
     resume: resume,
+    startMusic: startMusic, stopMusic: stopMusic,
     chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
     fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
     wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
     dump: function () { noise(0.28, 0.22, 900); tone(200, 0.28, 'sawtooth', 0.16, 460); },
     chainsaw: function () { tone(140, 0.18, 'sawtooth', 0.16, 210); tone(90, 0.2, 'square', 0.1, 130); noise(0.14, 0.12, 1800); },
     sling: function () { tone(430, 0.1, 'triangle', 0.14, 760); noise(0.05, 0.06, 2200); },
+    supernova: function () { tone(110, 0.8, 'sawtooth', 0.26, 1100); tone(330, 0.6, 'square', 0.14, 1400); noise(0.7, 0.34, 1500); },
     crit: function () { tone(720, 0.1, 'square', 0.14, 980); tone(480, 0.14, 'triangle', 0.12); },
     pickup: function () { [660, 880, 1180].forEach(function (f, i) { setTimeout(function () { tone(f, 0.14, 'triangle', 0.18); }, i * 70); }); },
     sizzle: function () { noise(0.14, 0.06, 2600); },
@@ -619,11 +653,22 @@ var BUFFS = {
   sling:    { name: 'Slingshot', icon: '🎯', color: 0x9ad0ff, dur: 14 },  // fling carried wood at shades
   telekinesis: { name: 'Telekinesis', icon: '🌀', color: 0xb98cff, dur: 10 }, // wood flies straight to the fire
   nova:     { name: 'Nova',     icon: '💥', color: 0xffe08a, dur: 0 },    // instant blast
+  supernova: { name: 'Super Nova', icon: '☄️', color: 0xbfe0ff, dur: 0 }, // erupt: burn every tree + shade
   toolbelt: { name: 'Toolbelt', icon: '🧰', color: 0xc98a4a, dur: 0 }     // instant, permanent +2 carry
 };
-// inferno/swift/harvest common; sling/telekinesis/ward/nova mid; chainsaw/toolbelt rare
-var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'sling', 'sling', 'telekinesis', 'telekinesis', 'nova', 'chainsaw', 'toolbelt'];
 function buffOn(k) { return game.buffs[k] > 0; }
+
+// Drops unlock as the nights escalate — early nights give the basics, and the rarest,
+// most powerful powers only start appearing deeper in a run (a progression hook).
+function randomDropType() {
+  var pool = ['inferno', 'swift', 'harvest', 'ward', 'inferno', 'swift', 'harvest'];   // tier 1 (common)
+  var n = game.night;
+  if (n >= 2) pool.push('sling', 'sling', 'nova');
+  if (n >= 3) pool.push('telekinesis', 'telekinesis', 'toolbelt');
+  if (n >= 4) pool.push('chainsaw');
+  if (n >= 5) pool.push('supernova');
+  return pool[Math.floor(rand(0, pool.length))];
+}
 
 // slingshot: while its buff is active you auto-fling carried wood (ammo) at the nearest
 // shade in range — a ranged way to thin a wave before it reaches the fire, at the cost
@@ -732,7 +777,6 @@ function addParticles(x, y, n, color, spd, life, sz) {
 function spawnDrop(x, y, type) {
   drops.push({ x: x, y: y, type: type, life: 13, bob: rand(0, TAU()) });
 }
-function randomDropType() { return DROP_POOL[Math.floor(rand(0, DROP_POOL.length))]; }
 
 function collectDrop(d) {
   var b = BUFFS[d.type];
@@ -744,6 +788,19 @@ function collectDrop(d) {
     for (var i = 0; i < shades.length; i++) { shades[i].hp -= 40; shades[i].hitFlash = 0.2; }
     game.flash = Math.max(game.flash, 0.5); game.shake = Math.max(game.shake, 10);
     game.blueFire = 5;                               // the blast burns the fire blue-hot for a moment
+  } else if (d.type === 'supernova') {
+    // the survivor ERUPTS into flame — the whole forest burns and every shade dies at once
+    flares.push({ x: survivor.x, y: survivor.y, r: 20, max: 1600, dmg: 140, life: 0.7, maxLife: 0.7 });
+    for (var si = 0; si < shades.length; si++) { shades[si].hp -= 999; shades[si].hitFlash = 0.3; }
+    var felled = 0;
+    for (var tri = 0; tri < trees.length; tri++) { var trr = trees[tri]; if (!trr.felling) { felled += trr.wood; trr.wood = 0; trr.felling = 0.5; addParticles(trr.x, trr.y, 22, '#ff9d3a', 190, 0.7, 4); } }
+    game.fuel = clamp(game.fuel + felled * 2.2, 0, CFG.fuelCap);   // the burning forest feeds the fire
+    if (felled > 0) addFloater(CFG.fireX, CFG.fireY - 24, '🔥 +' + Math.round(felled * 2.2), '#bfe0ff', true);
+    game.blueFire = 6; game.flash = Math.max(game.flash, 0.9); game.shake = Math.max(game.shake, 20);
+    game.supernovaT = 1.3;                            // the survivor stays ablaze for a beat
+    addParticles(survivor.x, survivor.y, 46, '#ffce54', 280, 0.85, 5);
+    addParticles(survivor.x, survivor.y, 30, '#bfe0ff', 240, 0.8, 4);
+    Audio2.supernova();
   } else if (d.type === 'toolbelt') {
     game.mods.carry = (game.mods.carry || 0) + 2;    // permanent bigger pack
     UI.flashCarry();
@@ -781,13 +838,14 @@ function startGame() {
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
-  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0; game.supernovaT = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
   for (var i = 0; i < 6; i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
+  Audio2.startMusic();
 }
 function endGame(win) {
   game.state = win ? 'win' : 'over';
@@ -799,6 +857,7 @@ function endGame(win) {
   if (game.isBest) saveBest(game.lastScore);
   shades.length = 0; drops.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.combo = 0;   // clear the stage for the end scene
   if (win) { game.fuel = CFG.fuelMax; game.buffs = {}; }  // a roaring victory fire
+  Audio2.stopMusic();
   if (win) Audio2.win(); else Audio2.lose();
   UI.showResult(win);
 }
@@ -891,6 +950,7 @@ function update(dt) {
   if (game.comboT > 0) { game.comboT -= dt; if (game.comboT <= 0) { game.comboT = 0; game.combo = 0; } }
   if (game.biteFloatCd > 0) game.biteFloatCd -= dt;   // throttles the fire-drain popup
   if (game.blueFire > 0) game.blueFire -= dt;         // Nova's temporary blue-hot fire
+  if (game.supernovaT > 0) { game.supernovaT -= dt; if (Math.random() < dt * 45) addParticles(survivor.x, survivor.y, 2, '#ffce54', 210, 0.6, 4); }  // survivor ablaze
   // floating reward text rises + fades
   for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
 
@@ -1233,13 +1293,13 @@ function renderScene(dt) {
   var flick = 1 + Math.sin(t * 14) * 0.07 + Math.sin(t * 27) * 0.05 + (Math.random() - 0.5) * 0.05;
   flick += blue * (Math.sin(t * 34) * 0.06 + (Math.random() - 0.5) * 0.06);   // hotter fire flickers faster/harder
   // light scales hard with fuel: a dying fire throws a small, dim pool
-  fireLight.intensity = (0.5 + it * 8.5) * flick * (1 + blue * 0.3);
-  fireLight.distance = 8.0 + it * 24;                         // reaches the top of the frame at a healthy fuel level
+  fireLight.intensity = (0.6 + it * 10.5) * flick * (1 + blue * 0.3);
+  fireLight.distance = 12.0 + it * 34;                        // reaches the top of the frame at a healthy fuel level
   fireLight.position.x = Math.sin(t * 9) * 0.06;
   fireLight.color.setRGB(lerp(1.0, 0.42, blue), lerp(0.54, 0.7, blue), lerp(0.23, 1.0, blue));
   // the whole world darkens as the fire fails (with a readable floor)
-  ambient.intensity = 0.3 + it * 0.4;
-  moonLight.intensity = 0.4 + it * 0.2;
+  ambient.intensity = 0.5 + it * 0.5;
+  moonLight.intensity = 0.6 + it * 0.25;
 
   // end-of-round mood: sunrise on a win, the dark swallowing everything on a loss
   if (game.state === 'win') {
@@ -1332,6 +1392,7 @@ function renderScene(dt) {
     tf = 1 + Math.sin(t * 20) * 0.2;
     torchLight.intensity = 1.1 + Math.sin(t * 18) * 0.3;
   }
+  if (game.supernovaT > 0) tf *= 1 + clamp(game.supernovaT / 1.3, 0, 1) * 3.5;   // survivor wreathed in flame
   torchFlame.scale.set(tf, tf, tf);
   // chainsaw in hand while its buff is active (vibrates)
   sawGrp.visible = buffOn('chainsaw');
@@ -1483,7 +1544,7 @@ function renderScene(dt) {
   // flare rings
   for (var ri = 0; ri < flareRings.length; ri++) {
     var rg = flareRings[ri];
-    if (ri < flares.length) { var flr = flares[ri]; var rad = wr(flr.r); rg.scale.set(rad, rad, rad); rg.material.opacity = clamp(flr.life / flr.maxLife, 0, 1) * 0.7; rg.visible = true; }
+    if (ri < flares.length) { var flr = flares[ri]; var rad = wr(flr.r); rg.scale.set(rad, rad, rad); rg.position.set(wx(flr.x), 0.08, wz(flr.y)); rg.material.opacity = clamp(flr.life / flr.maxLife, 0, 1) * 0.7; rg.visible = true; }
     else rg.visible = false;
   }
 

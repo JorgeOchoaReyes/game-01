@@ -159,6 +159,17 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     a three-line how-to. Re-tuned around the easier gathering (closer trees), with
     cold as the lever that punishes neglect: over 40-game bot cohorts, **sensible
     88%, careless 75%, reckless 33%** — a clear gradient.
+21. **Super Nova, gated drops, music & lighting (from playtests).** A rare
+    **Super Nova** drop makes the survivor erupt in flame — every tree is felled
+    into the fire and every shade dies at once (unlocks at night 5). Drops now
+    **unlock by depth**: early nights give the basics, and the strongest powers
+    only appear deeper in a run — a progression hook. Added a looping **8-bit
+    chiptune** (pure synth, no audio files, stays offline). The fire's light now
+    truly reaches the **top of the frame** (lower decay, longer range, higher
+    ambient floor), and the player can roam nearly to the top and bottom edges.
+    Balance stays a descending gradient (sensible ~80%, careless ~70%,
+    reckless ~43% over 30-game cohorts) — forgiving up front, with endless as the
+    real test.
 
 ## Balancing with a bot
 
