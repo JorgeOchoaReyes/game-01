@@ -170,6 +170,11 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     Balance stays a descending gradient (sensible ~80%, careless ~70%,
     reckless ~43% over 30-game cohorts) — forgiving up front, with endless as the
     real test.
+22. **Human Torch.** A player-centered counterpart to Super Nova (unlocks night
+    3): the survivor ignites, instantly killing every shade and felling every
+    tree within a near radius — the burned trees feed the fire — **at the cost of
+    the whole pack you're carrying** (spent as ignition). A tactical panic button
+    with a real price, distinct from the free, screen-wide Super Nova.
 
 ## Balancing with a bot
 

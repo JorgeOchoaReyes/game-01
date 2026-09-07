@@ -465,6 +465,7 @@ var BUFFS = {
   sling:    { name: 'Slingshot', icon: '🎯', color: 0x9ad0ff, dur: 14 },  // fling carried wood at shades
   telekinesis: { name: 'Telekinesis', icon: '🌀', color: 0xb98cff, dur: 10 }, // wood flies straight to the fire
   nova:     { name: 'Nova',     icon: '💥', color: 0xffe08a, dur: 0 },    // instant blast
+  humantorch: { name: 'Human Torch', icon: '🔥', color: 0xff5a1e, dur: 0 }, // ignite: burn nearby shades+trees, costs your pack
   supernova: { name: 'Super Nova', icon: '☄️', color: 0xbfe0ff, dur: 0 }, // erupt: burn every tree + shade
   toolbelt: { name: 'Toolbelt', icon: '🧰', color: 0xc98a4a, dur: 0 }     // instant, permanent +2 carry
 };
@@ -476,7 +477,7 @@ function randomDropType() {
   var pool = ['inferno', 'swift', 'harvest', 'ward', 'inferno', 'swift', 'harvest'];   // tier 1 (common)
   var n = game.night;
   if (n >= 2) pool.push('sling', 'sling', 'nova');
-  if (n >= 3) pool.push('telekinesis', 'telekinesis', 'toolbelt');
+  if (n >= 3) pool.push('telekinesis', 'telekinesis', 'toolbelt', 'humantorch');
   if (n >= 4) pool.push('chainsaw');
   if (n >= 5) pool.push('supernova');
   return pool[Math.floor(rand(0, pool.length))];
@@ -600,6 +601,23 @@ function collectDrop(d) {
     for (var i = 0; i < shades.length; i++) { shades[i].hp -= 40; shades[i].hitFlash = 0.2; }
     game.flash = Math.max(game.flash, 0.5); game.shake = Math.max(game.shake, 10);
     game.blueFire = 5;                               // the blast burns the fire blue-hot for a moment
+  } else if (d.type === 'humantorch') {
+    // the survivor bursts into flame: everything NEARBY burns — shades die, trees fell
+    // into the fire — but the whole held pack is spent as ignition (the cost)
+    var HT = 135;                                    // near radius
+    var held = game.carry; game.carry = 0;           // cost: all wood you're carrying
+    for (var hi = 0; hi < shades.length; hi++) { var hs = shades[hi]; if (dist2(hs.x, hs.y, survivor.x, survivor.y) < HT * HT) { hs.hp -= 999; hs.hitFlash = 0.3; } }
+    var htGot = 0;
+    for (var hti = 0; hti < trees.length; hti++) { var htt = trees[hti]; if (!htt.felling && dist2(htt.x, htt.y, survivor.x, survivor.y) < HT * HT) { htGot += htt.wood; htt.wood = 0; htt.felling = 0.5; addParticles(htt.x, htt.y, 16, '#ff9d3a', 175, 0.6, 3); } }
+    var htGain = htGot * CFG.feedPerLog;             // burned trees feed the fire (held wood is the price)
+    game.fuel = clamp(game.fuel + htGain, 0, CFG.fuelCap);
+    if (held > 0) addFloater(survivor.x, survivor.y - 14, '🪵 −' + held, '#ff9d6a', true);
+    if (htGain > 0) addFloater(CFG.fireX, CFG.fireY - 24, '🔥 +' + Math.round(htGain), '#ff9d3a', true);
+    flares.push({ x: survivor.x, y: survivor.y, r: 20, max: HT * 2.2, dmg: 90, life: 0.6, maxLife: 0.6 });
+    game.supernovaT = Math.max(game.supernovaT || 0, 1.1);   // reuse the "survivor ablaze" visual
+    game.flash = Math.max(game.flash, 0.6); game.shake = Math.max(game.shake, 12); game.blueFire = Math.max(game.blueFire || 0, 3);
+    addParticles(survivor.x, survivor.y, 34, '#ffce54', 240, 0.8, 5);
+    Audio2.supernova(); UI.syncDock();
   } else if (d.type === 'supernova') {
     // the survivor ERUPTS into flame — the whole forest burns and every shade dies at once
     flares.push({ x: survivor.x, y: survivor.y, r: 20, max: 1600, dmg: 140, life: 0.7, maxLife: 0.7 });
