@@ -245,7 +245,7 @@ scene.fog = new THREE.FogExp2(0x06040c, 0.05);
 
 var camera = new THREE.PerspectiveCamera(56, 1, 0.1, 100);
 var CAM = new THREE.Vector3(0, 13.5, 10.2);
-var CAM_LOOK = new THREE.Vector3(0, 0.2, -2.6);
+var CAM_LOOK = new THREE.Vector3(0, 0.2, -4.8);   // look further "north" so the fire sits low and the field opens above it
 camera.position.copy(CAM);
 camera.lookAt(CAM_LOOK);
 
@@ -742,10 +742,18 @@ function spawnTree() {
   // spread trees across the whole visible frame (top to bottom), off the fire zone,
   // well spaced from each other — the lit, fully-walkable frame keeps them reachable
   for (var tries = 0; tries < 40; tries++) {
-    var x = rand(BOUND.x0 + 24, BOUND.x1 - 24), y = rand(BOUND.y0 + 24, BOUND.y1 - 24);
-    if (dist2(x, y, CFG.fireX, CFG.fireY) < 84 * 84) continue;   // keep a small clear zone around the fire
+    var x = rand(BOUND.x0 + 24, BOUND.x1 - 24), y;
+    // most trees grow in the open field ABOVE the fire, skewed toward the near side
+    // (close to the fire) so wood is quick to reach; a few grow below
+    if (Math.random() < 0.82) {
+      var near = CFG.fireY - 55, top = BOUND.y0 + 24;
+      y = near - Math.pow(Math.random(), 1.4) * (near - top);   // pow<1 skew -> nearer the fire
+    } else {
+      y = rand(CFG.fireY + 70, BOUND.y1 - 20);
+    }
+    if (dist2(x, y, CFG.fireX, CFG.fireY) < 80 * 80) continue;   // keep a small clear zone around the fire
     var ok = true;
-    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 54 * 54) { ok = false; break; } }
+    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 52 * 52) { ok = false; break; } }
     if (!ok) continue;
     trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
     return true;
@@ -859,7 +867,7 @@ function startGame() {
   game.fuel = 65; game.warmth = 100; game.carry = 0;
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
-  survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
   game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0; game.supernovaT = 0; game.hurt = 0; game.hurtSndCd = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
@@ -894,7 +902,7 @@ function continueEndless() {
   game.night = CFG.nights + 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.fuel = clamp(game.fuel, 55, CFG.fuelCap); game.warmth = CFG.warmthMax; game.buffs = {};
   game.endT = 0; game.nightSpawnAcc = 0; game.combo = 0; game.comboT = 0;
-  survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0;
   shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0; projs.length = 0; groundWood.length = 0;
   var living = 0; for (var i = 0; i < trees.length; i++) if (!trees[i].felling) living++;
   for (var s = living; s < 6; s++) spawnTree();
