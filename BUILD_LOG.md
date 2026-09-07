@@ -1,245 +1,208 @@
-# Ember — Build Log
+# Ember Build Log
 
-A single-player, portrait **survival & resource management** prototype, built by
-prompting an AI coding agent and verifying every pass in a real headless browser.
+A single-player, portrait **survival & resource management** prototype. I built it by
+prompting an AI coding agent and checking every pass in a real headless browser before
+trusting it.
 
 - **Genre:** Survival & Resource Management
-- **Pitch:** Your campfire is your light, your warmth, your currency, and your only
-  weapon — one resource that does everything. Gather wood in the dark, feed the
-  fire, and survive five escalating nights.
-- **Tech:** Vanilla JS + **Three.js** (WebGL) for 3D rendering, Web Audio for
-  synthesized SFX. Three.js is the only third-party library (bundled in `vendor/`);
-  every model is built procedurally in code, no external assets, no network
-  requests. Started as HTML5 Canvas 2D, then converted to 3D (see passes 8–9).
+- **Pitch:** Your campfire is your light, your warmth, your money, and your only weapon.
+  One resource that does everything. Gather wood in the dark, feed the fire, and survive
+  five nights that keep getting harder.
+- **Tech:** Vanilla JS plus **Three.js** (WebGL) for the 3D, and Web Audio for
+  synthesized sound. Three.js is the only third-party library and it lives in `vendor/`.
+  Every model is built in code, there are no external assets, and nothing loads over the
+  network. It started as an HTML5 Canvas 2D game and then moved to 3D (see passes 8 and 9).
 
 ---
 
 ## Design north star
 
-The brief rewards a fun, playable **core loop** and **depth on a focused core**
-over breadth. So the whole game is built around one tension:
+The brief rewards a fun, playable **core loop** and **depth on one focused idea** over
+breadth, so the whole game is built around a single tension:
 
-> To keep the fire strong you must leave it — and leaving it is what puts it (and
-> you) in danger.
+> To keep the fire strong you have to leave it, and leaving it is exactly what puts the
+> fire (and you) in danger.
 
-Everything ties back to the single "fire" resource:
-- **Fuel = light radius** (how far you can safely gather),
-- **Fuel = burn power** (a hot fire kills shades before they reach it),
-- **Fuel = survival** (0 fuel = game over),
-- **Wood = fuel AND upgrade currency** (feed now vs. invest for later).
+Everything ties back to the one "fire" resource:
+- **Fuel is your light radius** (how far you can safely gather).
+- **Fuel is your burn power** (a hot fire kills shades before they reach it).
+- **Fuel is your survival** (zero fuel is game over).
+- **Wood is both fuel and upgrade currency** (feed it now, or invest for later).
 
-That satisfies the genre floor cleanly: **gather** (wood in the dark) → **convert**
-(feed the fire / craft permanent upgrades) → **survive** an **escalating threat**
-(nightly shade waves).
+That covers the genre cleanly. You **gather** wood in the dark, **convert** it by feeding
+the fire or crafting upgrades, and **survive** an escalating threat as the nightly shade
+waves grow.
 
 ## Constraints locked up front
 
-Told the agent the non-negotiables in the first prompt, per the guidance:
-- **Single-player**, **portrait only**, never rotates.
-- **Fully self-contained / offline**: everything bundled, procedural art,
-  synthesized audio, zero external requests.
-- **Readable single `index.html`** produced by a build step; libraries (none here)
-  would go in `vendor/`.
+I told the agent the non-negotiables in the very first prompt:
+- **Single-player** and **portrait only**, never rotates.
+- **Fully self-contained and offline.** Everything is bundled, the art is procedural, the
+  audio is synthesized, and there are zero external requests.
+- **One readable `index.html`** produced by a build step, with any libraries kept in
+  `vendor/`.
 
 ## Build passes (small, verified steps)
 
-Each pass ended with a real browser check — screenshots for layout/legibility and
-a headless driver for behaviour. "Done" was never trusted without playing it.
+Every pass ended with a real browser check. Screenshots for layout and legibility, and a
+headless driver for behavior. I never trusted "done" without actually playing it.
 
-1. **Scaffold + build pipeline.** `src/` → `build.js` inlines CSS + JS into one
-   readable, unminified `index.html`. Portrait 9:16 stage, fixed 540×960 virtual
-   canvas scaled to device pixels; DOM overlays share the same box.
-2. **Core loop.** Fire with fuel-driven light radius; virtual-joystick + keyboard
-   movement; wood nodes you chop by contact; banking wood at the fire; a **FEED**
-   action that converts wood → fuel with a flare burst. Top HUD meters.
-3. **Threat + survival.** Shades spawn from the dark and drain the fire; a lit fire
-   burns them (scales with fuel); a **warmth** meter drains in the dark and refills
-   in the light — a second, spatial lose condition that makes gathering a real risk.
-4. **Escalation + states.** Night/dawn phases, five nights, per-night scaling of
-   spawn rate / HP / decay. Win at the end of Night 5; lose on fire-death or
-   freezing. Title, game-over, and win screens with a score and **Play Again**.
-5. **Upgrades.** Four tracks bought with banked wood — Stoke (radius), Ashheart
-   (burn), Satchel (carry), Coat (warmth) — the "invest vs. feed now" decision.
-6. **Feedback & juice.** Particles, screen shake, feed flash, flicker, cold-blue
-   vignette, phase banners, a "fire is dying" warning, and synthesized SFX for
-   every action.
-7. **Art + fire-scaling pass (still 2D).** Made the flame scale hard with fuel — a
-   white-hot tower with an ember shower when fed, collapsing to a dim nub over
-   glowing coals as it dies — and redrew the survivor (hooded torch-bearer with a
-   walk cycle), trees (layered pines), and shades (wispy wraiths).
-8. **3D conversion (Three.js).** Swapped the presentation layer to a WebGL scene:
-   the fire became a real flickering point light casting **dynamic shadows** from
-   low-poly pines and a torch-bearing survivor. Crucially, the game logic was left
-   byte-identical — logic still runs in the 2D top-down field and is mapped onto the
-   ground plane (x→x, y→z), so every tuned distance/radius/speed carried over. All
-   HUD moved to DOM (meters, banners, joystick, dock, screens) since the canvas is
-   now WebGL. Three.js is bundled in `vendor/` and referenced by relative path in
-   `index.html`; the Artifact preview inlines it (CSP forbids external hosts).
-9. **3D readability fix.** Shades first read as dark rocks, so I made them
-   self-glowing purple wraiths with a soft halo and bright eyes — threats now read
-   at a glance even outside the firelight.
-10. **Feel + clarity pass (from playtests).** Smooth eased turning, a walk cycle,
-    and an overhead chop/attack swing; harvestable pines wear a ground ring and a
-    progress bar and visibly shrink as they're felled; the fire's *light* now
-    scales hard with fuel (a dying fire throws a small, dark pool); enemies glow
-    orange and show HP bars as the fire burns them; a "pack full" nudge explains
-    the gather dead-zone.
-11. **Depth pass (progression + difficulty).** Ability drops — shades drop (and
-    each dawn grants) glowing pickups: Inferno (fire burns 2× and wider), Swift
-    (move faster), Ward (immune to cold), Harvest (chop twice as fast, bonus logs),
-    and Nova (instant screen-clearing blast), shown as timed HUD chips. A tanky
-    Brute shade from night 3+, steeper per-night escalation, critical chops for
-    bonus wood, and solid tree collision (no walking through trunks). Re-balanced:
-    sensible 5/5, careless 5/5 on the razor's edge, reckless ~3/5.
-12. **Readability pass (from playtests).** Carry shown as a PACK pip meter (and a
-    floating meter above the avatar), plus a "pack full" nudge; a fire strength/
-    range ring that grows and brightens with fuel; a bank drop-zone ring. Fixed a
-    tree-respawn dry-out with a deterministic top-up that always keeps 6 reachable
+1. **Scaffold and build pipeline.** A `build.js` step inlines the CSS and JS from `src/`
+   into one readable, unminified `index.html`. Portrait 9:16 stage, a fixed 540x960 virtual
+   canvas scaled to the device, and DOM overlays sharing the same box.
+2. **Core loop.** A fire with a fuel-driven light radius, virtual-joystick and keyboard
+   movement, wood you chop by walking into it, banking wood at the fire, and a feed action
+   that turns wood into fuel with a flare. Top HUD meters.
+3. **Threat and survival.** Shades spawn from the dark and drain the fire. A lit fire burns
+   them, and it scales with fuel. A warmth meter drains in the dark and refills in the
+   light, which is a second, spatial way to lose and makes gathering a real risk.
+4. **Escalation and states.** Night and dawn phases, five nights, and per-night scaling of
+   spawn rate, HP, and decay. You win at the end of Night 5 and lose if the fire dies or you
+   freeze. Title, game-over, and win screens with a score and a play-again button.
+5. **Upgrades.** Four tracks bought with wood: Stoke (reach), Ashheart (burn), Satchel
+   (carry), and Coat (warmth). This is the "invest versus feed now" decision.
+6. **Feedback and juice.** Particles, screen shake, a feed flash, flicker, a cold-blue
+   vignette, phase banners, a "fire is dying" warning, and a synthesized sound for every
+   action.
+7. **Art and fire-scaling pass (still 2D).** Made the flame scale hard with fuel, from a
+   white-hot tower with an ember shower when fed down to a dim nub over glowing coals as it
+   dies. Also redrew the survivor (a hooded torch-bearer with a walk cycle), the trees, and
+   the shades.
+8. **3D conversion (Three.js).** Swapped the presentation layer to a WebGL scene. The fire
+   became a real flickering point light casting moving shadows from low-poly pines and a
+   torch-bearing survivor. The important part is that the game logic stayed identical. It
+   still runs in the 2D top-down field and maps onto the ground plane, so every tuned
+   distance, radius, and speed carried straight over. All the HUD moved to DOM since the
+   canvas is now WebGL. Three.js sits in `vendor/` and loads from a local path.
+9. **3D readability fix.** The shades first read as dark rocks, so I made them self-glowing
+   purple wraiths with a soft halo and bright eyes. Now threats read at a glance even
+   outside the firelight.
+10. **Feel and clarity pass (from playtests).** Smooth eased turning, a walk cycle, and an
+    overhead chop swing. Harvestable pines wear a ground ring and a progress bar and shrink
+    as they are felled. The fire's light now scales hard with fuel, so a dying fire throws a
+    small, dark pool. Enemies glow orange and show HP bars as the fire burns them, and a
+    "pack full" nudge explains the gather dead-zone.
+11. **Depth pass (progression and difficulty).** Ability drops arrived. Shades drop (and each
+    dawn grants) glowing pickups: Inferno (fire burns twice as hard and wider), Swift (move
+    faster), Ward (immune to cold), Harvest (chop twice as fast for bonus logs), and Nova (an
+    instant screen-clearing blast), shown as timed HUD chips. A tanky Brute shade from night
+    3 on, steeper per-night escalation, critical chops for bonus wood, and solid tree
+    collision so you cannot walk through trunks.
+12. **Readability pass (from playtests).** Carry is shown as a PACK pip meter plus a floating
+    meter above the avatar, with a "pack full" nudge. A fire strength ring grows and
+    brightens with fuel, and a bank drop-zone ring shows where to deposit. I also fixed a
+    tree-respawn dry-out with a deterministic top-up that always keeps a full set of reachable
     trees and refills fast.
-13. **Retention + game-feel pass.** Between-nights level-up: pick 1 of 3 permanent
-    run boons. Persistent best score (localStorage) with a NEW BEST chase. A
-    triumphant win (sunrise bloom, roaring fire, confetti, count-up) and a bleak
-    loss (world darkens, fire gutters out). Fell trees now topple with a reward
-    burst; a full pack auto-dumps from a generous range with wood arcing into the
-    fire and a flare-up. Submission-checked: readable single index.html, Three.js
-    in vendor/, zero external requests, portrait, single-player.
-14. **Active defense.** The torch swing that chops wood now also bashes shades
-    back (burn + knockback) when no tree is in reach — nights become an active
-    gather-vs-defend choice, not passive fire-tending.
-15. **Fixes + economy rework (from playtests).** Fixed a black-screen-on-replay
-    bug (the loss darkening wasn't reset for a fresh game, which also hid the
-    trees). Then reworked the economy so it reads intuitively: wood **feeds the
-    fire directly** on dump (no more hidden bank + FEED button), and **upgrades
-    cost the fire's own fuel** — a real sacrifice. Re-tuned: sensible 5/5,
-    careless 5/5, reckless ~1/5.
-16. **Rare tools + free roam (from playtests).** Two new ability drops: a
-    **chainsaw** (rare, temporary) that one-shots any tree — grabbing all its
-    wood in a single strike, with a chainsaw model in hand and a buzz — and a
-    **toolbelt** that permanently raises carry capacity. Movement changed from
-    fire-radius confinement to **free roam of the whole visible frame** (bounds
-    derived by ray-casting the camera to the ground), so every tree is
-    reachable; only the page edge stops you. Trees now spawn across the frame
-    and shades enter from its edges. Re-tuned for the larger arena: sensible
-    5/5, careless 3/5, reckless 0/5.
-17. **Constant-reward / engagement pass.** Every action now pays out visibly:
-    floating reward text (`+2`, `CRIT +2`, `🔥 +18`, buff names, `Lv up`) rises
-    from the point of each chop, kill, feed, upgrade and pickup. A **momentum
-    combo** ties it together — chops, crits and kills all feed one streak that
-    multiplies a style-bonus score, drives a heating `×N COMBO` HUD readout, and
-    fires a flourish every tenth hit; a hot streak also nudges drop luck, so
-    aggressive play earns more powers. Best-combo and the bonus feed the
-    persistent score chase (shown on the end screen). Re-tuned to keep the
-    gradient: sensible 5/5, careless ~3–5/5, reckless 0/5.
-18. **Endless mode.** Surviving Night 5 is still a real, celebrated win — but the
-    win screen now offers **KEEP THE FIRE BURNING**: the nights no longer end,
-    escalation continues forever (spawn rate, HP, decay and cold keep climbing,
-    with caps so late waves stay renderable), and the run ends only in death,
-    the score climbing the whole way. Upgrades, boons and best-score carry
-    through. Verified headless: a competent bot wins Night 5, continues, and is
-    eventually overwhelmed around Night 15 — the intended "how far can you get"
-    curve. The 5-night arc's balance is unchanged (the escalation caps only bite
-    from Night 7+).
-19. **Slingshot, irregulars & a hotter fire (from playtests).** A new **Slingshot**
-    drop auto-flings your carried wood at the nearest shade — wood is now ammo as
-    well as fuel, a real trade-off. A new teal **irregular** enemy hunts the
-    *player* instead of the fire, shrugs off the torch (only the slingshot or the
-    fire's own burn kills it), and knocks a log out of your pack on each hit — the
-    log drops as reclaimable ground wood. Shades reaching the fire now show a
-    clear "🔥 −N" drain popup so the threat reads. And the fire runs hotter the
-    deeper you go: from ~night 4 it shifts toward an intense, faster-flickering
-    **blue-white**, and the Nova drop flashes it blue-hot for a few seconds.
-    Tuned so the new threat stays fair (irregulars from night 3, they burn faster
-    in the fire): sensible ~4/5, careless a coin-flip, reckless 0/5.
-20. **Reach, readability & density (from playtests).** Trees now spawn biased
-    toward the fire so wood stays reachable at any night; a new **Telekinesis**
-    drop flies your carried wood straight to the fire (no trip back). The fire's
-    light now reaches the **top of the frame** (lower falloff + longer range) so
-    the whole play area reads, not just a small pool. Higher/endless nights spawn
-    **denser waves** (rate + shade caps raised). The title screen was cut down to
-    a three-line how-to. Re-tuned around the easier gathering (closer trees), with
-    cold as the lever that punishes neglect: over 40-game bot cohorts, **sensible
-    88%, careless 75%, reckless 33%** — a clear gradient.
-21. **Super Nova, gated drops, music & lighting (from playtests).** A rare
-    **Super Nova** drop makes the survivor erupt in flame — every tree is felled
-    into the fire and every shade dies at once (unlocks at night 5). Drops now
-    **unlock by depth**: early nights give the basics, and the strongest powers
-    only appear deeper in a run — a progression hook. Added a looping **8-bit
-    chiptune** (pure synth, no audio files, stays offline). The fire's light now
-    truly reaches the **top of the frame** (lower decay, longer range, higher
-    ambient floor), and the player can roam nearly to the top and bottom edges.
-    Balance stays a descending gradient (sensible ~80%, careless ~70%,
-    reckless ~43% over 30-game cohorts) — forgiving up front, with endless as the
-    real test.
-22. **Human Torch.** A player-centered counterpart to Super Nova (unlocks night
-    3): the survivor ignites, instantly killing every shade and felling every
-    tree within a near radius — the burned trees feed the fire — **at the cost of
-    the whole pack you're carrying** (spent as ignition). A tactical panic button
-    with a real price, distinct from the free, screen-wide Super Nova.
-23. **Damage clarity, risk & death feedback (from playtests).** Bumping any enemy
-    now throws a **red damage flash** + shake + thud and drains warmth, so taking
-    a hit is unmistakable; **death** lands with a hard red flash and shake as the
-    lose screen fades in. Trees are **spread across the whole frame** again (not
-    clustered), and **drops now spawn far from the fire** — grabbing a power means
-    braving the dark. Re-tuned for the harder pace (eased fuel/cold, more fuel per
-    log) and gave the balance bot a drop-chasing detour so the signal reflects the
-    real risk/reward: **sensible ~77%, careless ~57%, reckless ~31%**.
-24. **Layout: fire low, forest above (from playtests).** The camera now frames the
-    fire near the bottom of the screen, opening a wide field above it, and trees spawn mostly
-    **above the fire, skewed close** so wood is quick to reach while the forest
-    fills the screen. The survivor starts in the field just above the fire.
-    Gathering reads as a clear "climb up to chop, drop back to feed" rhythm.
-    The forest was also thickened — the field now keeps ~11 trees (was 6) and
-    refills faster — so the larger area reads as a proper forest instead of a few
-    scattered pines. Balance holds a descending gradient (sensible ~80%,
-    careless ~69%, reckless ~37% over 35-game cohorts).
+13. **Retention and game-feel pass.** A between-nights level-up where you pick one of three
+    permanent boons. A persistent best score (localStorage) with a "new best" chase. A
+    triumphant win (sunrise bloom, roaring fire, confetti, count-up) and a bleak loss (the
+    world darkens and the fire gutters out). Felled trees topple with a reward burst, and a
+    full pack auto-dumps from a generous range with wood arcing into the fire.
+14. **Active defense.** The torch swing that chops wood now also bashes shades back (burn plus
+    knockback) when no tree is in reach. Nights become an active gather-versus-defend choice
+    instead of passive fire-tending.
+15. **Fixes and economy rework (from playtests).** Fixed a black-screen-on-replay bug where
+    the loss darkening was never reset for a fresh game, which also hid the trees. Then I
+    reworked the economy so it reads intuitively. Wood now feeds the fire directly when you
+    dump it (no more hidden bank and separate feed button), and upgrades cost the fire's own
+    fuel, so every purchase is a real sacrifice.
+16. **Rare tools and free roam (from playtests).** Two new drops: a chainsaw (rare and
+    temporary) that fells a whole tree in one strike, and a toolbelt that permanently raises
+    carry capacity. Movement changed from being stuck near the fire to free roam of the whole
+    visible frame, with the bounds worked out by ray-casting the camera to the ground, so
+    every tree is reachable and only the page edge stops you.
+17. **Constant-reward and engagement pass.** Every action now pays out on screen. Floating
+    text (a plus number, "CRIT", the fuel gained, a buff name, "Lv up") rises from each chop,
+    kill, feed, upgrade, and pickup. A momentum combo ties it together. Chops, crits, and
+    kills all feed one streak that multiplies a style-bonus score, drives a heating combo
+    readout, and fires a flourish every tenth hit. A hot streak also nudges drop luck, so
+    aggressive play earns more powers. Best combo and the bonus feed the persistent score
+    chase on the end screen.
+18. **Endless mode.** Surviving Night 5 is still a real, celebrated win, but the win screen
+    now offers "keep the fire burning." The nights stop ending, the escalation keeps climbing
+    (with caps so the late waves stay renderable), and the run only ends in death while the
+    score climbs the whole way. Upgrades, boons, and the best score all carry through. Checked
+    headless: a competent bot wins Night 5, continues, and is eventually overwhelmed well into
+    the teens. The five-night arc is unchanged because the caps only bite much later.
+19. **Slingshot, irregulars, and a hotter fire (from playtests).** A Slingshot drop
+    auto-flings your carried wood at the nearest shade, so wood is now ammo as well as fuel.
+    A new teal irregular enemy hunts the player instead of the fire, shrugs off the torch (only
+    the slingshot or the fire's burn can kill it), and knocks a log out of your pack on each
+    hit, which drops as reclaimable ground wood. Shades draining the fire now show a clear
+    minus popup so the threat reads. The fire also runs hotter the deeper you go, shifting to
+    an intense blue-white, and the Nova drop flashes it blue-hot for a few seconds.
+20. **Reach, readability, and density (from playtests).** A new Telekinesis drop flies your
+    carried wood straight to the fire with no trip back. The fire's light now reaches the top
+    of the frame (lower falloff and longer range) so the whole play area reads instead of a
+    small pool. Deeper and endless nights spawn denser waves. The title screen was cut down to
+    a short, three-line how-to.
+21. **Super Nova, gated drops, music, and lighting (from playtests).** A rare Super Nova drop
+    makes the survivor erupt in flame, felling every tree into the fire and killing every shade
+    at once (it unlocks at night 5). Drops now unlock by depth, so early nights give the basics
+    and the strongest powers only show up deeper in a run, which adds a progression hook. Added
+    a looping 8-bit chiptune, made entirely with synthesis so it stays offline.
+22. **Human Torch.** A player-centered counterpart to Super Nova (unlocks night 3). The
+    survivor ignites and instantly kills every shade and fells every tree within a near radius,
+    and the burned trees feed the fire. The cost is your whole pack, spent as ignition. It is a
+    tactical panic button with a real price, distinct from the free, screen-wide Super Nova.
+23. **Damage clarity, risk, and death feedback (from playtests).** Bumping any enemy now
+    throws a red damage flash plus shake and a thud and drains warmth, so a hit is
+    unmistakable. Death lands with a hard red flash and shake as the lose screen fades in.
+    Trees spread across the whole frame again instead of clustering, and drops now spawn far
+    from the fire, so grabbing a power means braving the dark.
+24. **Layout: fire low, forest above (from playtests).** The camera now frames the fire near
+    the bottom of the screen and opens a wide field above it. Trees spawn mostly above the
+    fire, skewed close, so wood is quick to reach while the forest fills the screen, and the
+    survivor starts in that field. Gathering reads as a clear "climb up to chop, drop back to
+    feed" rhythm. I also thickened the forest so the field keeps around eleven trees (it was
+    six) and refills faster, so the larger area looks like a real forest.
 
 ## Balancing with a bot
 
-Rather than guess difficulty, I exposed a headless `step()` and drove two policies
-through **whole games at logic speed**:
+Instead of guessing at difficulty, I exposed a headless `step()` and drove bot policies
+through whole games at logic speed.
 
-- First tuning was brutal — a *near-optimal* bot died on **Night 1 every time**
-  (negative fuel economy; ~28 shades per night).
-- Retuned decay, cold, feed cost/gain, gather speed, spawn rate, and burn power.
-- Result: **sensible play wins ~4/5** (the final night is a genuine threat) while
-  **careless play loses 0/5**, dying around Nights 3–4 as escalation bites — a real
-  skill gradient, winnable but tense.
+- The first tuning was brutal. A near-optimal bot died on Night 1 every time because the
+  fuel economy was negative and there were far too many shades.
+- I retuned decay, cold, feed cost and gain, gather speed, spawn rate, and burn power, and
+  kept re-running.
+- To read the noise, I aggregate 30 to 40 game batches rather than trusting a handful of
+  games, and I taught the bot to detour for reachable drops so the numbers reflect how a
+  real person plays.
+- The result is a clean, descending gradient. Good play wins most of the time, the final
+  nights are a genuine threat, and reckless play loses far more often than it wins.
 
 ## Verification harness (`scripts/`)
 
 All browser checks launch headless Chromium with SwiftShader so WebGL renders.
 
-- `verify-game3d.js` — the authoritative 3D check: confirms WebGL renders, drives
-  real play, asserts feed raises fuel and upgrades apply; screenshots key states.
-- `verify-ends.js` — asserts lose, win, and reset-to-play screens all render.
-- `balance.js` — sensible-vs-careless bot cohorts (logic-only, no rendering),
-  reports win rates + margins. Re-run on the 3D build: **sensible 5/5, careless 0/5**.
-- `offline-check.js` — records every network request; passes only if nothing is
-  external. On the 3D build: **2 requests, both local** (`index.html` +
-  `vendor/three.min.js`), 0 external, 0 errors.
-- `verify.js` — the original 2D driver (kept alongside the 2D fallback source).
+- `verify-game3d.js` is the main check. It confirms WebGL renders, drives real play, and
+  asserts that feeding raises fuel and upgrades apply, with screenshots of key states.
+- `verify-features.js` asserts the power-ups and enemies behave (slingshot, telekinesis,
+  irregulars, Super Nova, and so on).
+- `verify-endless.js` confirms the Night-5 win, the continue into endless, and death.
+- `balance.js` runs bot cohorts (logic only, no rendering) and reports win rates.
+- `offline-check.js` records every network request and only passes if nothing is external.
+  On the current build there are two requests, both local (`index.html` and
+  `vendor/three.min.js`), zero external, and zero errors.
 
 ## Packaging
 
-`scripts/package.js` rebuilds, stages `index.html` at the **top level** plus the
-`vendor/` folder (`three.min.js` + README), and zips it. Final `ember.zip` ≈
-**161 KB** (limit 35 MB), unminified and readable. Three.js is the only vendored
-library; it is referenced by relative path, never a CDN.
+`scripts/package.js` rebuilds, stages `index.html` at the top level plus the `vendor/`
+folder, and zips it. The final `ember.zip` is about 179 KB (the limit is 35 MB), unminified
+and readable. Three.js is the only vendored library and it loads from a local path, never a
+CDN.
 
 ## What I deliberately did not build
 
-Per "where not to spend your time": no multiplayer, no physics, no day/night
-*lighting* simulation (phases are a gameplay cadence, not a rendering system), no
-detailed creature animation (the survivor is an abstract low-poly figure). Depth
-went into the one loop instead. The 3D pass changed only how the game is *drawn* —
-it did not add systems or complexity to the core loop.
+I skipped the things the brief warns against spending time on. No multiplayer, no physics
+engine, no full day/night lighting simulation (the phases are a gameplay cadence, not a
+render system), and no detailed creature animation. The depth went into the one loop
+instead. The 3D pass only changed how the game is drawn, not what it does.
 
-## Known trade-offs / next steps
+## Known trade-offs and next steps
 
-- Balance is bot-validated; a human playtest of the 3D build is the next step
-  (camera feel, movement speed, night readability).
-- The 2D build is preserved (`src/game.js`, `src/style.css`) as a fallback in case
-  the 3D version plays worse than it looks.
-- Could add a couple of distinct shade types (e.g. a fast darter, an armored
-  brute) for mid-session variety without widening the core.
-- A local best-score (localStorage) would add a "one more run" hook.
+- Balance is bot-validated, so a longer round of human playtesting is the natural next step.
+- A couple more distinct enemy types would add mid-run variety without widening the core.
+- The obvious growth areas are more environments, boss nights, deeper boon synergies, and
+  meta-progression, all still hanging off the one fire.

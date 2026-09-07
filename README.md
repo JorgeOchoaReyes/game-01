@@ -27,7 +27,7 @@ to the fire to bank it; then **FEED** the fire or buy upgrades from the bottom d
 
 ```
 src/
-  game3d.js     the 3D game — logic + Three.js rendering + DOM HUD (primary)
+  game3d.js     the 3D game, logic + Three.js rendering + DOM HUD (primary)
   style3d.css   layout & DOM HUD styling
   game.js       original 2D Canvas build (kept as a fallback)
   style.css     2D build styling
@@ -57,4 +57,4 @@ Browser checks run headless Chromium with SwiftShader so WebGL renders offscreen
 
 `node scripts/package.js` produces **`ember.zip`** (~161 KB, well under the 35 MB
 limit) with `index.html` at the top level and a `vendor/` folder containing
-`three.min.js` — ready to submit.
+`three.min.js`, ready to submit.
