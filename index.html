@@ -35,6 +35,7 @@ html, body {
 #vignette { box-shadow: inset 0 0 180px 40px rgba(0,0,0,0.85); }
 #cold { background: radial-gradient(circle at 50% 62%, rgba(60,160,255,0) 40%, rgba(60,160,255,0.35) 100%); opacity: 0; }
 #flash { background: rgba(255,220,120,0.6); opacity: 0; }
+#hurt { background: radial-gradient(circle at 50% 55%, rgba(255,40,40,0) 40%, rgba(200,0,0,0.62) 100%); opacity: 0; transition: opacity 0.06s; }
 
 /* ---- top HUD ---- */
 #hud { position: absolute; top: 0; left: 0; right: 0; padding: 12px 14px 10px;
@@ -215,7 +216,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedPerLog: 3.8, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
+  feedPerLog: 4.1, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -627,6 +628,7 @@ var Audio2 = (function () {
     upgrade: function () { tone(520, 0.12, 'triangle', 0.2); setTimeout(function () { tone(780, 0.18, 'triangle', 0.2); }, 90); },
     shadeDie: function () { noise(0.18, 0.22, 700); tone(90, 0.18, 'sine', 0.12, 40); },
     bite: function () { tone(70, 0.18, 'square', 0.18, 40); noise(0.12, 0.15, 500); },
+    hurt: function () { tone(150, 0.16, 'square', 0.18, 60); noise(0.1, 0.16, 480); },
     night: function () { tone(70, 0.9, 'sine', 0.16, 55); },
     dawn: function () { tone(330, 0.3, 'triangle', 0.16); setTimeout(function () { tone(494, 0.4, 'triangle', 0.16); }, 150); },
     lose: function () { tone(200, 1.1, 'sawtooth', 0.22, 45); },
@@ -737,17 +739,13 @@ function moveSpeed() { return CFG.survivorSpeed * (1 + (game.mods.speed || 0)) *
 function gatherTime() { return CFG.gatherTime * (game.mods.chop || 1) * (buffOn('harvest') ? 0.5 : 1); }
 
 function spawnTree() {
-  // spawn in a ring around the fire, biased toward the near side so wood stays reachable
-  // (still spread across the frame), off the fire/bank zone, not overlapping another tree
-  var maxR = Math.min(BOUND.x1 - BOUND.x0, BOUND.y1 - BOUND.y0) * 0.5 - 24;
+  // spread trees across the whole visible frame (top to bottom), off the fire zone,
+  // well spaced from each other — the lit, fully-walkable frame keeps them reachable
   for (var tries = 0; tries < 40; tries++) {
-    var ang = rand(0, TAU());
-    var rr = 96 + Math.pow(Math.random(), 1.7) * Math.max(70, maxR - 96);   // pow<1 skew -> closer to the fire
-    var x = clamp(CFG.fireX + Math.cos(ang) * rr, BOUND.x0 + 22, BOUND.x1 - 22);
-    var y = clamp(CFG.fireY + Math.sin(ang) * rr, BOUND.y0 + 22, BOUND.y1 - 22);
-    if (dist2(x, y, CFG.fireX, CFG.fireY) < 82 * 82) continue;   // not on the fire
+    var x = rand(BOUND.x0 + 24, BOUND.x1 - 24), y = rand(BOUND.y0 + 24, BOUND.y1 - 24);
+    if (dist2(x, y, CFG.fireX, CFG.fireY) < 84 * 84) continue;   // keep a small clear zone around the fire
     var ok = true;
-    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 46 * 46) { ok = false; break; } }
+    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 54 * 54) { ok = false; break; } }
     if (!ok) continue;
     trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
     return true;
@@ -776,7 +774,14 @@ function addParticles(x, y, n, color, spd, life, sz) {
 }
 
 function spawnDrop(x, y, type) {
-  drops.push({ x: x, y: y, type: type, life: 13, bob: rand(0, TAU()) });
+  // drops always appear FAR from the fire — grabbing one means leaving the safe
+  // light and braving the dark (a real risk/reward trek), wherever it was earned
+  var thr = 250, dx = x, dy = y;
+  for (var i = 0; i < 24; i++) {
+    dx = rand(BOUND.x0 + 20, BOUND.x1 - 20); dy = rand(BOUND.y0 + 20, BOUND.y1 - 20);
+    if (dist2(dx, dy, CFG.fireX, CFG.fireY) > thr * thr) break;
+  }
+  drops.push({ x: dx, y: dy, type: type, life: 17, bob: rand(0, TAU()) });
 }
 
 function collectDrop(d) {
@@ -856,7 +861,7 @@ function startGame() {
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
   survivor.x = CFG.fireX; survivor.y = CFG.fireY + 60; survivor.chill = 0;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
-  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0; game.supernovaT = 0;
+  game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0; game.supernovaT = 0; game.hurt = 0; game.hurtSndCd = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
@@ -868,6 +873,7 @@ function startGame() {
 function endGame(win) {
   game.state = win ? 'win' : 'over';
   game.endT = 0;
+  if (!win) { game.hurt = 1.3; game.shake = Math.max(game.shake, 18); }   // a hard, clear death hit
   game.lastScore = computeScore();
   var best = loadBest();
   game.isBest = game.lastScore > best;
@@ -934,6 +940,8 @@ function buyUpgrade(key) {
 function update(dt) {
   if (game.state !== 'play') {
     if (game.state === 'win' || game.state === 'over') game.endT += dt;
+    if (game.hurt > 0) game.hurt -= dt;                              // death flash fades over the end scene
+    if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 22);
     updateParticles(dt);
     return;
   }
@@ -969,10 +977,12 @@ function update(dt) {
   if (game.biteFloatCd > 0) game.biteFloatCd -= dt;   // throttles the fire-drain popup
   if (game.blueFire > 0) game.blueFire -= dt;         // Nova's temporary blue-hot fire
   if (game.supernovaT > 0) { game.supernovaT -= dt; if (Math.random() < dt * 45) addParticles(survivor.x, survivor.y, 2, '#ffce54', 210, 0.6, 4); }  // survivor ablaze
+  if (game.hurt > 0) game.hurt -= dt;                 // red damage flash fades
+  if (game.hurtSndCd > 0) game.hurtSndCd -= dt;
   // floating reward text rises + fades
   for (var flo = floaters.length - 1; flo >= 0; flo--) { floaters[flo].t += dt; if (floaters[flo].t >= floaters[flo].life) floaters.splice(flo, 1); }
 
-  var decay = 1.3 + game.night * 0.37 + (game.phase === 'night' ? 1.7 : 0);
+  var decay = 1.2 + game.night * 0.33 + (game.phase === 'night' ? 1.5 : 0);
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
   game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
@@ -1005,7 +1015,7 @@ function update(dt) {
   var warmthRate;
   if (litByFire) warmthRate = 22;
   else if (buffOn('ward')) warmthRate = 0;   // Ward: immune to the cold
-  else { var coldBase = 6 + game.night * 0.9 + (game.phase === 'night' ? 2.5 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
+  else { var coldBase = 5.5 + game.night * 0.8 + (game.phase === 'night' ? 2.2 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
   survivor.chill = 1 - game.warmth / CFG.warmthMax;
   if (game.warmth <= 0) { endGame(false); return; }
@@ -1196,6 +1206,10 @@ function update(dt) {
     var pdx = s.x - survivor.x, pdy = s.y - survivor.y, pdd2 = pdx * pdx + pdy * pdy;
     if (pdd2 < Math.pow(s.r + survivor.r, 2)) {
       var pd = Math.sqrt(pdd2) || 1;
+      // bumping any enemy hurts: a red damage flash + shake + sound so it's unmistakable
+      game.hurt = Math.max(game.hurt || 0, 0.45);
+      game.shake = Math.max(game.shake, 4);
+      if ((game.hurtSndCd || 0) <= 0) { Audio2.hurt(); game.hurtSndCd = 0.45; }
       if (s.kind === 'irregular') {
         // each hit knocks a log out of your pack (wood is both your fuel and your sling ammo)
         survivor.x += (pdx / pd) * 46 * dt; survivor.y += (pdy / pd) * 46 * dt;
@@ -1587,7 +1601,8 @@ var UI = (function () {
   var vignette = el('div', 'tint'); vignette.id = 'vignette';
   var cold = el('div', 'tint'); cold.id = 'cold';
   var flash = el('div', 'tint'); flash.id = 'flash';
-  stage.appendChild(vignette); stage.appendChild(cold); stage.appendChild(flash);
+  var hurt = el('div', 'tint'); hurt.id = 'hurt';
+  stage.appendChild(vignette); stage.appendChild(cold); stage.appendChild(flash); stage.appendChild(hurt);
 
   // HUD
   var hud = el('div'); hud.id = 'hud';
@@ -1734,6 +1749,7 @@ var UI = (function () {
   function flashCarry() { elCarryWrap.classList.remove('pop'); void elCarryWrap.offsetWidth; elCarryWrap.classList.add('pop'); }
 
   function updateHUD() {
+    hurt.style.opacity = game.hurt > 0 ? clamp(game.hurt, 0, 1) * 0.85 : 0;   // red damage flash (also on death)
     if (game.state !== 'play') return;
     elNight.textContent = game.endless ? ('NIGHT ' + game.night + ' ∞') : ('NIGHT ' + game.night + ' / ' + CFG.nights);
     var isNight = game.phase === 'night';

@@ -175,6 +175,14 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     tree within a near radius — the burned trees feed the fire — **at the cost of
     the whole pack you're carrying** (spent as ignition). A tactical panic button
     with a real price, distinct from the free, screen-wide Super Nova.
+23. **Damage clarity, risk & death feedback (from playtests).** Bumping any enemy
+    now throws a **red damage flash** + shake + thud and drains warmth, so taking
+    a hit is unmistakable; **death** lands with a hard red flash and shake as the
+    lose screen fades in. Trees are **spread across the whole frame** again (not
+    clustered), and **drops now spawn far from the fire** — grabbing a power means
+    braving the dark. Re-tuned for the harder pace (eased fuel/cold, more fuel per
+    log) and gave the balance bot a drop-chasing detour so the signal reflects the
+    real risk/reward: **sensible ~77%, careless ~57%, reckless ~31%**.
 
 ## Balancing with a bot
 

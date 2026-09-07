@@ -56,7 +56,11 @@ const server = http.createServer((req, res) => {
         }
         // reckless play dawdles instead of returning to feed
         const lazy = policy.skipFeed && Math.random() < policy.skipFeed;
+        // a nearby drop worth detouring for (real players brave the dark for powers)
+        let drop = null, dd = 1e9;
+        for (const d of E.drops) { const q = (d.x - E.survivor.x) ** 2 + (d.y - E.survivor.y) ** 2; if (q < dd) { dd = q; drop = d; } }
         if (G.warmth < policy.warmAt) steer(E.cfg.fireX, E.cfg.fireY, policy.noise);
+        else if (drop && dd < 300 * 300 && G.warmth > policy.warmAt + 20) steer(drop.x, drop.y, policy.noise);   // grab a reachable drop
         else if ((G.carry < cap || lazy) && E.trees.length) { const t = nearestTree(); if (t) steer(t.x, t.y, policy.noise); }
         else steer(E.cfg.fireX, E.cfg.fireY, policy.noise);   // return -> auto-feeds the fire
         E.step(dt);
