@@ -188,6 +188,14 @@ headless driver for behavior. I never trusted "done" without actually playing it
     wood it finishes with a "nice, that's the loop" beat and never shows again
     (remembered in localStorage). It only guides the first tree and the first
     drop-off; after that the player is on their own.
+29. **Bigger, escalating waves (from playtests).** Night 2 felt empty because the
+    spawn trickle was slow and a fed fire vaporized it before anything built up.
+    The spawn rate now starts higher and ramps hard each night, shades are tankier
+    so more survive the burn to press the fire (which also keeps more of them on
+    screen), and player-hunting irregulars now arrive from Night 2. Peak concurrent
+    shades roughly doubled per night (about 8, 11, 13, 18 across nights 1, 2, 3, 5
+    even against a full fire). Re-tuned to stay winnable: sensible ~66%, careless
+    ~49%, reckless ~3% over 35-game cohorts.
 
 ## Balancing with a bot
 
