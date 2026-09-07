@@ -184,7 +184,7 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     log) and gave the balance bot a drop-chasing detour so the signal reflects the
     real risk/reward: **sensible ~77%, careless ~57%, reckless ~31%**.
 24. **Layout: fire low, forest above (from playtests).** The camera now frames the
-    fire in the lower third, opening the field above it, and trees spawn mostly
+    fire near the bottom of the screen, opening a wide field above it, and trees spawn mostly
     **above the fire, skewed close** so wood is quick to reach while the forest
     fills the screen. The survivor starts in the field just above the fire.
     Gathering reads as a clear "climb up to chop, drop back to feed" rhythm;
