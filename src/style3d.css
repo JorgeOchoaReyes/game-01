@@ -134,7 +134,12 @@ html, body {
 .screen.lose { background: radial-gradient(circle at 50% 46%, rgba(24,8,10,0.55), rgba(0,0,0,0.98) 68%); animation: losefade 1.6s ease-in forwards; }
 .screen.lose h2 { color: #ff5f5f; text-shadow: 0 0 20px rgba(120,0,0,0.6); letter-spacing: 1px; }
 .screen.lose p, .screen.lose .stat { color: #8a7d75; }
-.screen.levelup { background: radial-gradient(circle at 50% 38%, rgba(60,44,14,0.55), rgba(6,4,10,0.92) 76%); animation: screenfade 0.35s ease-out; }
+.screen.levelup { background: radial-gradient(circle at 50% 40%, rgba(90,64,20,0.6), rgba(6,4,10,0.9) 74%); animation: screenfade 0.35s ease-out; }
+@keyframes nightpop { 0% { transform: scale(0.4); opacity: 0; } 55% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); } }
+.screen.levelup h2 { color: #ffe08a; font-size: 30px; text-shadow: 0 0 34px rgba(255,205,95,0.85); animation: nightpop 0.55s cubic-bezier(0.2,0.9,0.3,1.2) both; }
+.nightbadge { font-size: 15px; font-weight: 800; letter-spacing: 3px; color: #2a1400;
+  background: linear-gradient(90deg, #ff8a2b, #ffe08a); padding: 5px 16px; border-radius: 20px;
+  box-shadow: 0 0 22px rgba(255,200,80,0.7); animation: winpulse 0.9s ease-in-out infinite; }
 
 .score { font-size: 32px; font-weight: 800; color: #ffd24a; text-shadow: 0 0 18px rgba(255,200,80,0.6); font-variant-numeric: tabular-nums; }
 .newbest { font-size: 17px; font-weight: 800; color: #2a1400; background: linear-gradient(90deg, #ff8a2b, #ffe08a); padding: 6px 18px; border-radius: 22px; box-shadow: 0 0 24px rgba(255,200,80,0.75); animation: winpulse 0.7s ease-in-out infinite; }

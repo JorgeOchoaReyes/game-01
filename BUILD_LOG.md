@@ -174,6 +174,13 @@ headless driver for behavior. I never trusted "done" without actually playing it
     struggle. The combo window also dropped from 2.6s to 1.5s, so you have to keep
     acting to hold a streak. Re-tuned to a harder but fair gradient: sensible ~63%,
     careless ~34%, reckless ~3% over 35-game cohorts.
+27. **Celebrate every night survived (from playtests).** Surviving a night is now a
+    real reward moment, not a quiet menu. When dawn breaks the fire roars up with a
+    spark fountain and a bright flash, a triumphant fanfare plays, and the between
+    nights screen greets you with a big animated "NIGHT X SURVIVED!" that pops in, a
+    pulsing "dawn breaks" badge, and a confetti burst, before you pick your boon. It
+    fires on every cleared night (and every night in endless), so progress always
+    feels earned and celebrated.
 
 ## Balancing with a bot
 

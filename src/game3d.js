@@ -437,6 +437,7 @@ var Audio2 = (function () {
     hurt: function () { tone(150, 0.16, 'square', 0.18, 60); noise(0.1, 0.16, 480); },
     night: function () { tone(70, 0.9, 'sine', 0.16, 55); },
     dawn: function () { tone(330, 0.3, 'triangle', 0.16); setTimeout(function () { tone(494, 0.4, 'triangle', 0.16); }, 150); },
+    nightWin: function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { tone(f, 0.16, 'triangle', 0.2); tone(f / 2, 0.16, 'sine', 0.08); }, i * 85); }); setTimeout(function () { tone(1319, 0.3, 'triangle', 0.18); }, 360); noise(0.18, 0.08, 3200); },
     lose: function () { tone(200, 1.1, 'sawtooth', 0.22, 45); },
     win: function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, 'triangle', 0.18); }, i * 140); }); }
   };
@@ -718,7 +719,12 @@ function startLevelUp() {
   for (var i = 0; i < 3 && pool.length; i++) game.boons.push(pool.splice(Math.floor(rand(0, pool.length)), 1)[0]);
   game.state = 'levelup';
   floaters.length = 0; projs.length = 0; groundWood.length = 0; game.combo = 0;
-  Audio2.dawn();
+  // celebrate surviving the night: the fire roars up, sparks fountain out, fanfare plays
+  game.dumpFlash = 1.2; game.flash = Math.max(game.flash, 0.55); game.shake = Math.max(game.shake, 6); game.blueFire = 0;
+  addParticles(CFG.fireX, CFG.fireY, 48, '#ffd24a', 210, 1.0, 5);
+  addParticles(CFG.fireX, CFG.fireY, 26, '#8affc1', 180, 0.9, 4);
+  addParticles(CFG.fireX, CFG.fireY, 20, '#ff8a2b', 240, 0.8, 4);
+  Audio2.nightWin();
   UI.showLevelUp();
 }
 function pickBoon(idx) {
@@ -750,6 +756,8 @@ function update(dt) {
     if (game.state === 'win' || game.state === 'over') game.endT += dt;
     if (game.hurt > 0) game.hurt -= dt;                              // death flash fades over the end scene
     if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 22);
+    if (game.flash > 0) game.flash = Math.max(0, game.flash - dt * 1.6);
+    if (game.dumpFlash > 0) game.dumpFlash = Math.max(0, game.dumpFlash - dt * 1.1);  // night-survived fire roar eases down
     updateParticles(dt);
     return;
   }
@@ -1513,8 +1521,9 @@ var UI = (function () {
 
   // between-nights level up: pick one of three permanent boons
   function showLevelUp() {
-    var h = el('h2', null, '☀ NIGHT ' + (game.night - 1) + ' SURVIVED'); h.style.color = '#ffe08a';
-    var p = el('p', null, 'Dawn breaks. Choose a boon to carry into the coming nights:');
+    var h = el('h2', null, '☀ NIGHT ' + (game.night - 1) + ' SURVIVED!'); h.style.color = '#ffe08a';
+    var badge = el('div', 'nightbadge', 'DAWN BREAKS');
+    var p = el('p', null, 'You kept the fire alive. Choose a boon to carry into the coming nights:');
     var row = el('div', 'boons');
     game.boons.forEach(function (bn, i) {
       var card = el('button', 'boon');
@@ -1522,7 +1531,10 @@ var UI = (function () {
       card.addEventListener('click', function () { pickBoon(i); });
       row.appendChild(card);
     });
-    showScreen([h, p, row], 'levelup');
+    // a celebratory confetti burst, same as the win screen
+    var conf = el('div', 'confetti');
+    for (var c = 0; c < 34; c++) { var pc = el('i'); pc.style.left = (Math.random() * 100) + '%'; pc.style.background = ['#ffd24a', '#ff8a2b', '#8affc1', '#5fd0ff', '#ffe08a'][c % 5]; pc.style.animationDelay = (Math.random() * 0.9) + 's'; pc.style.animationDuration = (1.4 + Math.random() * 1.3) + 's'; conf.appendChild(pc); }
+    showScreen([conf, h, badge, p, row], 'levelup');
   }
 
   var countTimer = null;
