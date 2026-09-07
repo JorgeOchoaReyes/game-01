@@ -112,6 +112,15 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     fire directly** on dump (no more hidden bank + FEED button), and **upgrades
     cost the fire's own fuel** — a real sacrifice. Re-tuned: sensible 5/5,
     careless 5/5, reckless ~1/5.
+16. **Rare tools + free roam (from playtests).** Two new ability drops: a
+    **chainsaw** (rare, temporary) that one-shots any tree — grabbing all its
+    wood in a single strike, with a chainsaw model in hand and a buzz — and a
+    **toolbelt** that permanently raises carry capacity. Movement changed from
+    fire-radius confinement to **free roam of the whole visible frame** (bounds
+    derived by ray-casting the camera to the ground), so every tree is
+    reachable; only the page edge stops you. Trees now spawn across the frame
+    and shades enter from its edges. Re-tuned for the larger arena: sensible
+    5/5, careless 3/5, reckless 0/5.
 
 ## Balancing with a bot
 
