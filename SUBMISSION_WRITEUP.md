@@ -1,4 +1,4 @@
-# Ember — Submission Writeup
+# Ember Submission Writeup
 
 ## Inspiration
 
