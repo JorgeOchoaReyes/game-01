@@ -10,7 +10,7 @@ Ember is a single player, portrait, 3D survival game. You step out of the fireli
 
 ## How we built it
 
-We used plain JavaScript with Three.js for the 3D. That was the big payoff: the fire is a real flickering light that casts moving shadows and even turns blue white when it gets hot late in a run. There are no image, model, or sound files anywhere. Every model is built in code and every sound is generated with the Web Audio API, including an 8 bit music loop. That is what keeps the whole game around 179 KB and fully offline.
+We used plain JavaScript with Three.js for the 3D. That was the big payoff: the fire is a real flickering light that casts moving shadows and even turns blue white when it gets hot late in a run. There are no image, model, or sound files anywhere. Every model is built in code and every sound is generated with the Web Audio API, including an 8 bit music loop. That is what keeps the whole game around 182 KB and fully offline.
 
 A small build step stitches our source files into one readable, unminified index.html. The only outside library is Three.js, and it sits in a vendor folder that loads from a local path, never a CDN. The game logic actually runs in a simple 2D top down world and gets mapped onto the 3D ground, so all our tuned distances and speeds carried straight over when we switched to 3D.
 
@@ -36,7 +36,7 @@ The fire is the part we love most. It is basically the whole game in one object.
 
 We packed a surprising amount of depth onto that one resource. There are combos, two layers of progression, three enemy types, eleven different power ups (everything from a slingshot that fires your own wood to a screen clearing Super Nova), and an endless mode, and it all hangs off the same fire.
 
-And we shipped it as a 179 KB, fully offline, readable single file, with a win that feels great and a death that feels bad.
+And we shipped it as a 182 KB, fully offline, readable single file, with a win that feels great and a death that feels bad.
 
 ## What we learned
 

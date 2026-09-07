@@ -55,6 +55,6 @@ Browser checks run headless Chromium with SwiftShader so WebGL renders offscreen
 
 ## Submission
 
-`node scripts/package.js` produces **`ember.zip`** (~161 KB, well under the 35 MB
+`node scripts/package.js` produces **`ember.zip`** (~182 KB, well under the 35 MB
 limit) with `index.html` at the top level and a `vendor/` folder containing
 `three.min.js`, ready to submit.

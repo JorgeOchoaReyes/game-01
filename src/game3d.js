@@ -787,7 +787,7 @@ function update(dt) {
   if (game.phase === 'dawn') {
     if (game.phaseTime <= 0) { game.phase = 'night'; game.phaseTime = CFG.nightLen; game.nightSpawnAcc = 0; setBanner('NIGHT ' + game.night, 'The dark comes — keep it burning', 2.4); Audio2.night(); }
   } else {
-    var hpMul = 1 + (game.night - 1) * 0.95, spdMul = 1 + (game.night - 1) * 0.14;
+    var hpMul = 1 + (game.night - 1) * 0.85, spdMul = 1 + (game.night - 1) * 0.13;
     var ratePerSec = Math.min(0.8 + game.night * 0.55, 6.5);            // clearly more enemies each night (capped for perf)
     var bruteChance = game.night >= 3 ? Math.min(0.15 + (game.night - 3) * 0.1, 0.5) : 0;
     var irregChance = game.night >= 2 ? Math.min(0.08 + (game.night - 2) * 0.04, 0.24) : 0;   // player-hunting irregulars (from night 2)

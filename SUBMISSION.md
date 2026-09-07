@@ -17,7 +17,7 @@
 | **Session length** | ~3 to 5 minutes per run; endless mode for longer sessions |
 | **Tech** | Vanilla JS + Three.js (WebGL 3D), Web Audio (synthesized SFX + chiptune) |
 | **Offline** | Fully self-contained, zero external/network requests |
-| **Build size** | ~179 KB zipped (limit 35 MB) |
+| **Build size** | ~182 KB zipped (limit 35 MB) |
 
 ---
 
@@ -85,7 +85,7 @@ Ember collapses the survival genre's gather → craft → defend loop onto a sin
 - [x] **Portrait** only; never rotates.
 - [x] **Fully self-contained / offline**: verified 0 external requests (`scripts/offline-check.js`).
 - [x] **`index.html` at the top level** of the zip.
-- [x] **Under 35 MB**: build is ~179 KB.
+- [x] **Under 35 MB**: build is ~182 KB.
 - [x] **Readable, unminified** code produced by a build step (`build.js`).
 - [x] **Third-party libraries in `vendor/`**: only Three.js, referenced by relative path (never a CDN at runtime).
 - [x] **No runtime external requests**: procedural art, synthesized audio, no external assets.
@@ -98,7 +98,7 @@ Ember collapses the survival genre's gather → craft → defend loop onto a sin
 
 - Presentation is 3D (Three.js r128, WebGL, soft shadows); game logic runs in a 2D top-down field mapped onto the ground plane, so tuned distances/speeds carry over exactly.
 - All art is built procedurally in code, no image or model files. All audio is synthesized with the Web Audio API, no sound files. This is what keeps the build tiny and fully offline.
-- Verified in a real headless browser: WebGL renders, the core loop plays start-to-finish, and balance was tuned with bot cohorts (good play wins ~80%, reckless play loses most of the time).
+- Verified in a real headless browser: WebGL renders, the core loop plays start-to-finish, and balance was tuned with bot cohorts (good play wins around two-thirds of runs, reckless play almost always loses).
 
 ## Credits
 

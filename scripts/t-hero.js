@@ -1,0 +1,18 @@
+const http=require('http'),fs=require('fs'),path=require('path'),{chromium}=require('playwright');
+const ROOT=path.join(__dirname,'..'),EXEC='/opt/pw-browsers/chromium-1194/chrome-linux/chrome',PORT=8213;
+const MIME={'.html':'text/html','.js':'text/javascript','.css':'text/css'};
+const server=http.createServer((q,s)=>{let p=q.url.split('?')[0];if(p==='/')p='/index.html';const fp=path.join(ROOT,p);if(!fp.startsWith(ROOT)||!fs.existsSync(fp)){s.writeHead(404);s.end();return;}s.writeHead(200,{'Content-Type':MIME[path.extname(fp)]||'text/plain'});fs.createReadStream(fp).pipe(s);});
+(async()=>{await new Promise(r=>server.listen(PORT,r));
+const b=await chromium.launch({executablePath:EXEC,args:['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
+const pg=await b.newPage({viewport:{width:440,height:820},deviceScaleFactor:2});const errs=[];pg.on('pageerror',e=>errs.push(e.message));
+await pg.goto('http://localhost:'+PORT+'/index.html',{waitUntil:'load'});
+await pg.evaluate(()=>{try{localStorage.setItem('ember_tut','1');}catch(e){}});await pg.reload({waitUntil:'load'});
+await pg.click('.big');await pg.waitForTimeout(150);
+await pg.evaluate(async()=>{const E=window.__EMBER,wait=ms=>new Promise(r=>setTimeout(r,ms));
+ E.game.night=2;E.game.phase='night';E.game.phaseTime=E.cfg.nightLen;E.game.fuel=95;E.game.buffs.inferno=10;E.game.carry=3;
+ for(let k=0;k<80;k++){const t=E.trees[0];if(t){const dx=t.x-E.survivor.x,dy=t.y-E.survivor.y,d=Math.hypot(dx,dy)||1;E.input.active=true;E.input.dx=dx/d;E.input.dy=dy/d;E.input.mag=1;}E.step(1/30);await wait(0);}E.input.active=false;});
+await pg.waitForTimeout(150);await pg.screenshot({path:path.join(ROOT,'scripts/shots/58-action.png')});
+const st=await pg.evaluate(()=>({night:__EMBER.game.night,shades:__EMBER.shades.length}));
+await b.close();await new Promise(r=>server.close(r));
+console.log('night2 action — shades on screen:',st.shades,'| errors:',errs.length);
+})();

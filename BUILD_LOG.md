@@ -204,6 +204,13 @@ headless driver for behavior. I never trusted "done" without actually playing it
     controls and legend, with resume and restart. And the title screen got a
     flickering flame over a glowing wordmark, a gold best-score badge, and the
     same control buttons.
+31. **Final tune and compliance pass.** Eased the shade toughness a notch so the
+    bigger waves stay winnable (good play about two thirds of runs, reckless play
+    almost never), then ran the whole verification battery one more time: WebGL
+    renders, the loop plays start to finish, all the power-ups and enemies behave,
+    the tutorial and endless flow work, and there are zero external requests and
+    zero runtime errors. Refreshed the docs so every figure matches the shipped
+    build.
 
 ## Balancing with a bot
 
@@ -237,7 +244,7 @@ All browser checks launch headless Chromium with SwiftShader so WebGL renders.
 ## Packaging
 
 `scripts/package.js` rebuilds, stages `index.html` at the top level plus the `vendor/`
-folder, and zips it. The final `ember.zip` is about 179 KB (the limit is 35 MB), unminified
+folder, and zips it. The final `ember.zip` is about 182 KB (the limit is 35 MB), unminified
 and readable. Three.js is the only vendored library and it loads from a local path, never a
 CDN.
 
