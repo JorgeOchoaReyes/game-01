@@ -249,20 +249,15 @@ var CAM_LOOK = new THREE.Vector3(0, 0.2, -6.6);   // look well "north" so the fi
 camera.position.copy(CAM);
 camera.lookAt(CAM_LOOK);
 
-// The player may roam the whole visible frame (not a small circle). We derive the
-// on-screen ground rectangle by raycasting the camera, and clamp/spawn within it.
-var BOUND = { x0: 30, x1: 510, y0: 190, y1: 800 };
-var _ray = new THREE.Raycaster();
-var _groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-function _hitGround(nx, ny) { _ray.setFromCamera(new THREE.Vector2(nx, ny), camera); var v = new THREE.Vector3(); return _ray.ray.intersectPlane(_groundPlane, v) ? v : null; }
-function computeBounds() {
-  var tl = _hitGround(-0.94, 0.7), tr = _hitGround(0.94, 0.7), bl = _hitGround(-0.94, -0.72), br = _hitGround(0.94, -0.72);
-  var tc = _hitGround(0, 0.7), bc = _hitGround(0, -0.72);
-  if (!tl || !tr || !bl || !br || !tc || !bc) return;
-  var xHalf = Math.min(Math.abs(tr.x), Math.abs(br.x), Math.abs(tl.x), Math.abs(bl.x)) - 0.4; // narrowest, so always on-screen
-  BOUND.x0 = CFG.fireX - xHalf / K; BOUND.x1 = CFG.fireX + xHalf / K;
-  BOUND.y0 = CFG.fireY + tc.z / K + 8; BOUND.y1 = CFG.fireY + bc.z / K - 6; // tc.z (far) < bc.z (near); reach nearly to top & bottom
-}
+// The play area is a fixed, bounded field that is taller than one screen: the fire
+// sits near the bottom and the forest stretches up "north". The camera FOLLOWS the
+// player through this field (see the render loop), so you can walk up into the back
+// trees and stay on screen. FIELD_UP/DOWN set how far the field reaches from the fire.
+var FIELD_UP = 600, FIELD_DOWN = 95, FIELD_HALFW = 235;
+var BOUND = { x0: CFG.fireX - FIELD_HALFW, x1: CFG.fireX + FIELD_HALFW, y0: CFG.fireY - FIELD_UP, y1: CFG.fireY + FIELD_DOWN };
+function computeBounds() { /* the field is fixed; the camera scrolls through it to follow the player */ }
+// follow-camera state: base offsets chosen so the framing near the fire matches the old fixed shot
+var LOOK_BIAS = -4.95, DOLLY_Z = 16.8;
 
 function resize() {
   var r = stage.getBoundingClientRect();
@@ -461,12 +456,12 @@ function buildTree(seed) {
 
 // static background treeline just outside the arena — atmosphere + a visible edge
 var treeline = new THREE.Group(); scene.add(treeline);
-for (var bl = 0; bl < 22; bl++) {
-  var ba = (bl / 22) * TAU() + (bl % 2) * 0.14;
-  var brad = 430 + (bl % 3) * 30;   // well beyond the reachable frame, as a backdrop
+for (var bl = 0; bl < 34; bl++) {
+  var ba = (bl / 34) * TAU() + (bl % 2) * 0.09;
+  var brad = 720 + (bl % 3) * 50;   // well beyond the reachable field (FIELD_UP), a pure backdrop
   var bp = makePine(bl * 37 + 5, [0x223f28, 0x274a2e, 0x2d5636]);
   bp.position.set(wx(CFG.fireX + Math.cos(ba) * brad), 0, wz(CFG.fireY + Math.sin(ba) * brad));
-  bp.scale.multiplyScalar(1.1);
+  bp.scale.multiplyScalar(1.2);
   treeline.add(bp);
 }
 
@@ -738,22 +733,17 @@ function burnDps() { return (34 + UPGRADES.ashheart.lvl * 12) * (1 + (game.mods.
 function moveSpeed() { return CFG.survivorSpeed * (1 + (game.mods.speed || 0)) * (buffOn('swift') ? 1.6 : 1); }
 function gatherTime() { return CFG.gatherTime * (game.mods.chop || 1) * (buffOn('harvest') ? 0.5 : 1); }
 
+// how many living trees the field aims to keep — grows as the nights go on
+function treeTarget() { return Math.min(12 + (game.night - 1) * 2, 26); }
 function spawnTree() {
-  // spread trees across the whole visible frame (top to bottom), off the fire zone,
-  // well spaced from each other — the lit, fully-walkable frame keeps them reachable
-  for (var tries = 0; tries < 40; tries++) {
-    var x = rand(BOUND.x0 + 24, BOUND.x1 - 24), y;
-    // most trees grow in the open field ABOVE the fire, skewed toward the near side
-    // (close to the fire) so wood is quick to reach; a few grow below
-    if (Math.random() < 0.82) {
-      var near = CFG.fireY - 55, top = BOUND.y0 + 24;
-      y = near - Math.pow(Math.random(), 1.4) * (near - top);   // pow<1 skew -> nearer the fire
-    } else {
-      y = rand(CFG.fireY + 70, BOUND.y1 - 20);
-    }
-    if (dist2(x, y, CFG.fireX, CFG.fireY) < 80 * 80) continue;   // keep a small clear zone around the fire
+  // spread trees evenly across the tall field (mostly north of the fire, a few south),
+  // well spaced so the forest fills the whole area instead of clustering by the fire
+  for (var tries = 0; tries < 46; tries++) {
+    var x = rand(BOUND.x0 + 24, BOUND.x1 - 24);
+    var y = (Math.random() < 0.88) ? rand(BOUND.y0 + 30, CFG.fireY - 80) : rand(CFG.fireY + 70, BOUND.y1 - 20);
+    if (dist2(x, y, CFG.fireX, CFG.fireY) < 95 * 95) continue;   // keep a clear zone around the fire
     var ok = true;
-    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 52 * 52) { ok = false; break; } }
+    for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 60 * 60) { ok = false; break; } }
     if (!ok) continue;
     trees.push({ x: x, y: y, r: 17, wood: 5, chop: 0, seed: Math.floor(rand(0, 1e6)) });
     return true;
@@ -761,12 +751,11 @@ function spawnTree() {
   return false;
 }
 function spawnShade(hpMul, spdMul, kind) {
-  // spawn just outside the frame on a random edge, so they march in on-screen
-  var m = 34, x, y, edge = Math.floor(rand(0, 4));
-  if (edge === 0) { x = rand(BOUND.x0, BOUND.x1); y = BOUND.y0 - m; }        // top
-  else if (edge === 1) { x = rand(BOUND.x0, BOUND.x1); y = BOUND.y1 + m; }   // bottom
-  else if (edge === 2) { x = BOUND.x0 - m; y = rand(BOUND.y0, BOUND.y1); }   // left
-  else { x = BOUND.x1 + m; y = rand(BOUND.y0, BOUND.y1); }                   // right
+  // spawn on a ring around the fire (random direction) so the distance to the fire is
+  // consistent no matter how tall the field is; clamp inside the field so they read
+  var ang = rand(0, TAU()), rr = rand(300, 380);
+  var x = clamp(CFG.fireX + Math.cos(ang) * rr, BOUND.x0 - 30, BOUND.x1 + 30);
+  var y = clamp(CFG.fireY + Math.sin(ang) * rr, BOUND.y0 - 30, BOUND.y1 + 30);
   kind = kind || 'shade';
   var hp, r, spd, bite;
   if (kind === 'brute') { hp = 10 * hpMul; r = 19; spd = rand(15, 22) * spdMul; bite = 7; }        // slow, tanky, hits the fire hard
@@ -867,13 +856,13 @@ function startGame() {
   game.fuel = 65; game.warmth = 100; game.carry = 0;
   game.night = 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.woodPopped = 0; game.shadesBurned = 0; game.shake = 0; game.lowFuelWarn = 0; game.flash = 0;
-  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0; game.camZ = null;
   trees.length = 0; shades.length = 0; particles.length = 0; flares.length = 0; drops.length = 0; tosses.length = 0; floaters.length = 0; projs.length = 0; groundWood.length = 0; game.dumpFlash = 0;
   game.combo = 0; game.comboT = 0; game.comboBest = 0; game.bonus = 0; game.endless = false; game.slingCd = 0; game.biteFloatCd = 0; game.blueFire = 0; game.tkCd = 0; game.supernovaT = 0; game.hurt = 0; game.hurtSndCd = 0;
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
-  for (var i = 0; i < CFG.treeCount; i++) spawnTree();
+  for (var i = 0; i < treeTarget(); i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
   Audio2.startMusic();
@@ -902,10 +891,10 @@ function continueEndless() {
   game.night = CFG.nights + 1; game.phase = 'dawn'; game.phaseTime = CFG.dawnLen;
   game.fuel = clamp(game.fuel, 55, CFG.fuelCap); game.warmth = CFG.warmthMax; game.buffs = {};
   game.endT = 0; game.nightSpawnAcc = 0; game.combo = 0; game.comboT = 0;
-  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0;
+  survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0; game.camZ = null;
   shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0; projs.length = 0; groundWood.length = 0;
   var living = 0; for (var i = 0; i < trees.length; i++) if (!trees[i].felling) living++;
-  for (var s = living; s < CFG.treeCount; s++) spawnTree();
+  for (var s = living; s < treeTarget(); s++) spawnTree();
   spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType());
   setBanner('ENDLESS NIGHTS', 'They no longer end — how long can you last?', 3.2);
   UI.showScreen(null); UI.syncDock();
@@ -1188,11 +1177,12 @@ function update(dt) {
   }
   if (game.dumpFlash > 0) game.dumpFlash = Math.max(0, game.dumpFlash - dt * 2);
 
-  // keep the forest stocked (deterministic top-up to treeCount; refills faster the
-  // emptier it gets, so heavy gathering never runs it dry and the field stays full)
-  if (living < CFG.treeCount) {
+  // keep the forest stocked (deterministic top-up to treeTarget(), which grows each
+  // night; refills faster the emptier it gets so heavy gathering never runs it dry)
+  var target = treeTarget();
+  if (living < target) {
     game.treeTimer = (game.treeTimer || 0) - dt;
-    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = living < CFG.treeCount * 0.6 ? 0.18 : 0.4; }
+    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = living < target * 0.6 ? 0.16 : 0.36; }
   } else game.treeTimer = 0;
 
   var R = fireRadius(), dps = burnDps(), anyBurning = false;
@@ -1588,9 +1578,16 @@ function renderScene(dt) {
     else rg.visible = false;
   }
 
-  // camera shake
+  // follow camera: track the player north-south through the field, clamped so it never
+  // scrolls past the field edges (the treeline stays visible ahead at the far north)
+  var pz = wz(survivor.y);
+  var northClamp = wz(BOUND.y0) + 3.0, southClamp = wz(BOUND.y1) - 1.0;
+  var targetZ = clamp(pz, northClamp, southClamp);
+  game.camZ = (game.camZ == null) ? targetZ : lerp(game.camZ, targetZ, Math.min(1, dt * 5));
+  var lookZ = game.camZ + LOOK_BIAS;
+  CAM_LOOK.set(0, 0.2, lookZ);
   var shk = game.shake * K * 2.2;
-  camera.position.set(CAM.x + Math.sin(t * 0.25) * 0.4 + rand(-1, 1) * shk, CAM.y + rand(-1, 1) * shk, CAM.z);
+  camera.position.set(Math.sin(t * 0.25) * 0.4 + rand(-1, 1) * shk, CAM.y + rand(-1, 1) * shk, lookZ + DOLLY_Z);
   camera.lookAt(CAM_LOOK);
 
   UI.updateHUD();

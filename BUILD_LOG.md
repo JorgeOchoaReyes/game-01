@@ -156,6 +156,18 @@ headless driver for behavior. I never trusted "done" without actually playing it
     survivor starts in that field. Gathering reads as a clear "climb up to chop, drop back to
     feed" rhythm. I also thickened the forest so the field keeps around eleven trees (it was
     six) and refills faster, so the larger area looks like a real forest.
+25. **Follow camera and a taller field (from playtests).** The play area is now a
+    fixed, bounded field that is taller than one screen, with the fire near the
+    bottom and the forest stretching up. The camera follows the player north and
+    south through it, so you can walk up into the back trees and stay on screen
+    while the fire scrolls behind you. Trees spread evenly across the field instead
+    of clustering by the fire, and the field keeps more of them as the nights go on
+    (about twelve on Night 1, rising with each night). Shades now spawn on a ring
+    around the fire so their distance stays consistent no matter how tall the field
+    is. I also fixed a confusing case where the background treeline sat inside the
+    reachable area and looked choppable, by pushing it well past the field edge as a
+    pure backdrop. Balance holds a clean gradient (sensible ~89%, careless ~66%,
+    reckless ~20% over 35-game cohorts).
 
 ## Balancing with a bot
 
