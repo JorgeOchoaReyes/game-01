@@ -216,7 +216,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedPerLog: 4.1, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
+  feedPerLog: 4.1, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92, treeCount: 11
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -873,7 +873,7 @@ function startGame() {
   for (var k in UPGRADES) UPGRADES[k].lvl = 0;
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
-  for (var i = 0; i < 6; i++) spawnTree();
+  for (var i = 0; i < CFG.treeCount; i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
   Audio2.startMusic();
@@ -905,7 +905,7 @@ function continueEndless() {
   survivor.x = CFG.fireX; survivor.y = CFG.fireY - 55; survivor.chill = 0;
   shades.length = 0; drops.length = 0; floaters.length = 0; particles.length = 0; projs.length = 0; groundWood.length = 0;
   var living = 0; for (var i = 0; i < trees.length; i++) if (!trees[i].felling) living++;
-  for (var s = living; s < 6; s++) spawnTree();
+  for (var s = living; s < CFG.treeCount; s++) spawnTree();
   spawnDrop(CFG.fireX + rand(-60, 60), CFG.fireY - rand(50, 100), randomDropType());
   setBanner('ENDLESS NIGHTS', 'They no longer end — how long can you last?', 3.2);
   UI.showScreen(null); UI.syncDock();
@@ -1188,11 +1188,11 @@ function update(dt) {
   }
   if (game.dumpFlash > 0) game.dumpFlash = Math.max(0, game.dumpFlash - dt * 2);
 
-  // keep the forest stocked with reachable trees (deterministic top-up to 6;
-  // refills faster the emptier it gets, so heavy gathering never runs it dry)
-  if (living < 6) {
+  // keep the forest stocked (deterministic top-up to treeCount; refills faster the
+  // emptier it gets, so heavy gathering never runs it dry and the field stays full)
+  if (living < CFG.treeCount) {
     game.treeTimer = (game.treeTimer || 0) - dt;
-    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = living < 3 ? 0.25 : 0.6; }
+    if (game.treeTimer <= 0) { spawnTree(); game.treeTimer = living < CFG.treeCount * 0.6 ? 0.18 : 0.4; }
   } else game.treeTimer = 0;
 
   var R = fireRadius(), dps = burnDps(), anyBurning = false;

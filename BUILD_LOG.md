@@ -187,8 +187,11 @@ a headless driver for behaviour. "Done" was never trusted without playing it.
     fire near the bottom of the screen, opening a wide field above it, and trees spawn mostly
     **above the fire, skewed close** so wood is quick to reach while the forest
     fills the screen. The survivor starts in the field just above the fire.
-    Gathering reads as a clear "climb up to chop, drop back to feed" rhythm;
-    balance settled at **sensible ~83%, careless ~60%, reckless ~23%**.
+    Gathering reads as a clear "climb up to chop, drop back to feed" rhythm.
+    The forest was also thickened — the field now keeps ~11 trees (was 6) and
+    refills faster — so the larger area reads as a proper forest instead of a few
+    scattered pines. Balance holds a descending gradient (sensible ~80%,
+    careless ~69%, reckless ~37% over 35-game cohorts).
 
 ## Balancing with a bot
 
