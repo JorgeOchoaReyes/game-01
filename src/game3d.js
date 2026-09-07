@@ -365,7 +365,7 @@ for (var fr = 0; fr < 6; fr++) {
 // ===========================================================================
 var Audio2 = (function () {
   var ac = null, master = null, enabled = true;
-  function ensure() { if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.6; master.connect(ac.destination); } catch (e) { enabled = false; } }
+  function ensure() { if (ac) return; try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = (AUDIO_STATE === 2) ? 0 : 0.6; master.connect(ac.destination); } catch (e) { enabled = false; } }
   function resume() { ensure(); if (ac && ac.state === 'suspended') ac.resume(); }
   function tone(freq, dur, type, vol, slideTo) {
     if (!enabled) return; ensure(); if (!ac) return;
@@ -410,16 +410,30 @@ var Audio2 = (function () {
     mTimer = setTimeout(mSchedule, 55);
   }
   function startMusic() {
-    if (!enabled) return; ensure(); if (!ac || musicOn) return;
+    if (!enabled || AUDIO_STATE !== 0) return; ensure(); if (!ac || musicOn) return;   // state 0 = music on
     musicOn = true;
     if (!mGain) { mGain = ac.createGain(); mGain.gain.value = 0.5; mGain.connect(master); }
     mStep = 0; mNext = ac.currentTime + 0.1; mSchedule();
   }
   function stopMusic() { musicOn = false; if (mTimer) { clearTimeout(mTimer); mTimer = null; } }
 
+  // audio state: 0 = sound + music, 1 = sound only (music off), 2 = all muted. Persisted.
+  var AUDIO_STATE = 0;
+  try { AUDIO_STATE = parseInt(localStorage.getItem('ember_audio') || '0', 10) || 0; } catch (e) {}
+  function applyMasterGain() { if (master) master.gain.value = (AUDIO_STATE === 2) ? 0 : 0.6; }
+  function cycleAudio() {
+    ensure();
+    AUDIO_STATE = (AUDIO_STATE + 1) % 3;
+    try { localStorage.setItem('ember_audio', String(AUDIO_STATE)); } catch (e) {}
+    applyMasterGain();
+    if (AUDIO_STATE === 0) { if (game.state === 'play') startMusic(); } else stopMusic();
+    return AUDIO_STATE;
+  }
+  function audioState() { return AUDIO_STATE; }
+
   return {
     resume: resume,
-    startMusic: startMusic, stopMusic: stopMusic,
+    startMusic: startMusic, stopMusic: stopMusic, cycleAudio: cycleAudio, audioState: audioState,
     chop: function () { noise(0.12, 0.25, 1600); tone(220, 0.08, 'square', 0.06); },
     fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
     wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
@@ -435,6 +449,7 @@ var Audio2 = (function () {
     shadeDie: function () { noise(0.18, 0.22, 700); tone(90, 0.18, 'sine', 0.12, 40); },
     bite: function () { tone(70, 0.18, 'square', 0.18, 40); noise(0.12, 0.15, 500); },
     hurt: function () { tone(150, 0.16, 'square', 0.18, 60); noise(0.1, 0.16, 480); },
+    heartbeat: function () { tone(82, 0.13, 'sine', 0.24, 52); setTimeout(function () { tone(68, 0.15, 'sine', 0.2, 42); }, 135); },
     night: function () { tone(70, 0.9, 'sine', 0.16, 55); },
     dawn: function () { tone(330, 0.3, 'triangle', 0.16); setTimeout(function () { tone(494, 0.4, 'triangle', 0.16); }, 150); },
     nightWin: function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { tone(f, 0.16, 'triangle', 0.2); tone(f / 2, 0.16, 'sine', 0.08); }, i * 85); }); setTimeout(function () { tone(1319, 0.3, 'triangle', 0.18); }, 360); noise(0.18, 0.08, 3200); },
@@ -678,6 +693,7 @@ function startGame() {
   game.buffs = {}; game.treeTimer = 0; game.mods = {}; game.endT = 0; game.isBest = false;
   game.banner = null; game.tipShown = false;
   game.tut = tutDone() ? 0 : 1;   // step 1: go chop a tree (only the very first time)
+  game.paused = false;
   for (var i = 0; i < treeTarget(); i++) spawnTree();
   setBanner('DAWN', 'Chop wood, then FEED the fire', 3.4);
   UI.showScreen(null); UI.syncDock();
@@ -756,6 +772,7 @@ function buyUpgrade(key) {
 }
 
 function update(dt) {
+  if (game.paused) return;   // pause overlay open: freeze the sim, keep rendering
   if (game.state !== 'play') {
     if (game.state === 'win' || game.state === 'over') game.endT += dt;
     if (game.hurt > 0) game.hurt -= dt;                              // death flash fades over the end scene
@@ -806,6 +823,11 @@ function update(dt) {
   game.fuel -= decay * dt;
   if (game.fuel <= 0) { game.fuel = 0; endGame(false); return; }
   game.lowFuelWarn = game.fuel < 22 ? (game.lowFuelWarn + dt) : 0;
+  // low-fire danger: a heartbeat that quickens as the fire nears death
+  if (game.fuel < 22) {
+    game.heartCd = (game.heartCd || 0) - dt;
+    if (game.heartCd <= 0) { Audio2.heartbeat(); game.heartCd = 0.45 + (game.fuel / 22) * 0.75; }
+  } else game.heartCd = 0;
 
   var dir = keyboardDir(), mvx = 0, mvy = 0, mag = 0;
   if (dir) { mvx = dir.dx; mvy = dir.dy; mag = dir.mag; }
@@ -1423,7 +1445,7 @@ function renderScene(dt) {
   UI.updateHUD();
   UI.syncFloaters(floaters, projectToStage);
   // first-load tutorial pointer: aim at the nearest tree, then at the fire
-  if (game.tut && game.state === 'play') {
+  if (game.tut && game.state === 'play' && !game.paused) {
     var ttx, tty, ttxt;
     if (game.tut === 1) {
       var nt = null, nd = 1e9;
@@ -1447,7 +1469,8 @@ var UI = (function () {
   var cold = el('div', 'tint'); cold.id = 'cold';
   var flash = el('div', 'tint'); flash.id = 'flash';
   var hurt = el('div', 'tint'); hurt.id = 'hurt';
-  stage.appendChild(vignette); stage.appendChild(cold); stage.appendChild(flash); stage.appendChild(hurt);
+  var danger = el('div', 'tint'); danger.id = 'danger';
+  stage.appendChild(vignette); stage.appendChild(cold); stage.appendChild(flash); stage.appendChild(hurt); stage.appendChild(danger);
 
   // HUD
   var hud = el('div'); hud.id = 'hud';
@@ -1522,20 +1545,50 @@ var UI = (function () {
   });
   dock.appendChild(upRow);
 
+  // top-right controls: pause + audio toggle
+  var controls = el('div'); controls.id = 'controls';
+  var pauseBtn = el('button', 'ctrlbtn', '⏸'); pauseBtn.title = 'Pause';
+  var AUDIO_ICON = ['🔊', '🔈', '🔇'];
+  var muteBtn = el('button', 'ctrlbtn', AUDIO_ICON[Audio2.audioState()]); muteBtn.title = 'Sound: all / music off / muted';
+  controls.appendChild(pauseBtn); controls.appendChild(muteBtn); stage.appendChild(controls);
+  muteBtn.addEventListener('click', function (e) { e.stopPropagation(); Audio2.resume(); muteBtn.textContent = AUDIO_ICON[Audio2.cycleAudio()]; });
+
+  // pause overlay (a modal that freezes the game without resetting it)
+  var pauseScr = el('div', 'screen pausescreen'); pauseScr.hidden = true; stage.appendChild(pauseScr);
+  function showPause() {
+    if (game.state !== 'play' || game.paused) return;
+    game.paused = true; Audio2.stopMusic();
+    pauseScr.innerHTML = '';
+    pauseScr.appendChild(el('h2', null, '⏸ PAUSED'));
+    var lg = el('div', 'legend');
+    lg.appendChild(legendRow('#4f9a56', 'Chop pines for wood'));
+    lg.appendChild(legendRow('#ff8a2b', 'Bring it to the fire to feed it'));
+    lg.appendChild(legendRow('#8f79ff', 'Fight off the shades each night'));
+    lg.appendChild(legendRow('#9ad0ff', 'Grab glowing drops for powers'));
+    pauseScr.appendChild(lg);
+    pauseScr.appendChild(el('p', 'hint', 'Drag to move · WASD / arrows also work'));
+    var resume = el('button', 'big', 'RESUME'); resume.addEventListener('click', hidePause); pauseScr.appendChild(resume);
+    var restart = el('button', 'restart', '↻ Restart run'); restart.addEventListener('click', function () { hidePause(); startGame(); }); pauseScr.appendChild(restart);
+    pauseScr.hidden = false;
+  }
+  function hidePause() { game.paused = false; pauseScr.hidden = true; if (game.state === 'play') Audio2.startMusic(); }
+  pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); Audio2.resume(); if (game.paused) hidePause(); else showPause(); });
+
   // screen overlay
   var screen = el('div', 'screen hidden'); stage.appendChild(screen);
 
   function showScreen(nodes, cls) {
     screen.className = 'screen' + (cls ? ' ' + cls : '');
-    if (!nodes) { screen.classList.add('hidden'); screen.innerHTML = ''; dock.style.display = 'flex'; hud.style.display = 'block'; return; }
+    if (!nodes) { screen.classList.add('hidden'); screen.innerHTML = ''; dock.style.display = 'flex'; hud.style.display = 'block'; pauseBtn.hidden = false; return; }
     screen.innerHTML = ''; nodes.forEach(function (n) { screen.appendChild(n); });
-    dock.style.display = 'none'; hud.style.display = 'none';
+    dock.style.display = 'none'; hud.style.display = 'none'; pauseBtn.hidden = true;
     // hide transient in-world overlays so they don't ghost behind the menu
     banner.style.opacity = 0; warn.style.opacity = 0; packhint.style.opacity = 0; stick.style.opacity = 0; buffbar.innerHTML = ''; combo.style.opacity = 0; tutText.hidden = true; tutPtr.hidden = true;
   }
   function legendRow(color, text) { var r = el('div', 'row'); var d = el('span', 'dot'); d.style.background = color; r.appendChild(d); r.appendChild(el('span', null, text)); return r; }
   function showTitle() {
-    var h = el('h1', null, 'EMBER');
+    var flame = el('div', 'titleflame', '🔥');
+    var h = el('h1', 'titleword', 'EMBER');
     var p = el('p', null, 'Your fire is your light, warmth, wealth, and only weapon. Feed it, or the dark takes you.');
     var legend = el('div', 'legend');
     legend.appendChild(legendRow('#4f9a56', 'Chop pines for wood'));
@@ -1544,9 +1597,9 @@ var UI = (function () {
     var how = el('p', 'hint', 'Drag anywhere to move. Grab glowing drops for powers. Survive.');
     var btn = el('button', 'big', 'LIGHT THE FIRE'); btn.addEventListener('click', function () { Audio2.resume(); startGame(); });
     var best = loadBest();
-    var bestEl = best > 0 ? el('div', 'stat', '★ Best score: ' + best) : null;
+    var bestEl = best > 0 ? el('div', 'bestbadge', '★ BEST ' + best) : null;
     var credit = el('div', 'credit', 'A survival prototype · portrait · offline · 3D');
-    var nodes = [h, p, legend, how, btn];
+    var nodes = [flame, h, p, legend, how, btn];
     if (bestEl) nodes.push(bestEl);
     nodes.push(credit);
     showScreen(nodes);
@@ -1662,6 +1715,8 @@ var UI = (function () {
     // tints
     cold.style.opacity = survivor.chill > 0.15 ? (survivor.chill * 0.9) : 0;
     flash.style.opacity = game.flash > 0 ? game.flash * 0.7 : 0;
+    // red danger edge: pulses to a heartbeat, stronger the closer the fire is to death
+    danger.style.opacity = game.fuel < 22 ? (0.3 + 0.45 * Math.abs(Math.sin(game.time * 6))) * (1 - game.fuel / 22) : 0;
     // joystick
     if (input.active) { stick.style.opacity = 0.6; stick.style.left = input.ox + 'px'; stick.style.top = input.oy + 'px'; stickNub.style.transform = 'translate(' + (input.x - input.ox) + 'px,' + (input.y - input.oy) + 'px)'; }
     else stick.style.opacity = 0;

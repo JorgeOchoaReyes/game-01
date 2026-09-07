@@ -196,6 +196,14 @@ headless driver for behavior. I never trusted "done" without actually playing it
     shades roughly doubled per night (about 8, 11, 13, 18 across nights 1, 2, 3, 5
     even against a full fire). Re-tuned to stay winnable: sensible ~66%, careless
     ~49%, reckless ~3% over 35-game cohorts.
+30. **Finishing touches (from playtests).** Four polish passes at once. A sound
+    control in the top-right cycles all on, music off, or fully muted (remembered
+    in localStorage). A low-fire danger cue makes near-death visceral: the screen
+    edges pulse red to a heartbeat that quickens as the fuel runs out. A pause
+    button opens a modal that freezes the run without resetting it and shows the
+    controls and legend, with resume and restart. And the title screen got a
+    flickering flame over a glowing wordmark, a gold best-score badge, and the
+    same control buttons.
 
 ## Balancing with a bot
 
