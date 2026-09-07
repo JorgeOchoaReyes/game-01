@@ -27,7 +27,7 @@ var CFG = {
   playTop: 132, playBottom: VH - 150,
   fuelMax: 100, warmthMax: 100,
   survivorSpeed: 215, carryBase: 6, gatherTime: 0.65,
-  feedPerLog: 3.6, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
+  feedPerLog: 4.4, fuelCap: 130, nights: 5, nightLen: 26, dawnLen: 10, bankRadius: 92
 };
 function wx(gx) { return (gx - CFG.fireX) * K; }
 function wz(gy) { return (gy - CFG.fireY) * K; }
@@ -60,13 +60,30 @@ var CAM_LOOK = new THREE.Vector3(0, 0.2, -2.6);
 camera.position.copy(CAM);
 camera.lookAt(CAM_LOOK);
 
+// The player may roam the whole visible frame (not a small circle). We derive the
+// on-screen ground rectangle by raycasting the camera, and clamp/spawn within it.
+var BOUND = { x0: 30, x1: 510, y0: 190, y1: 800 };
+var _ray = new THREE.Raycaster();
+var _groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function _hitGround(nx, ny) { _ray.setFromCamera(new THREE.Vector2(nx, ny), camera); var v = new THREE.Vector3(); return _ray.ray.intersectPlane(_groundPlane, v) ? v : null; }
+function computeBounds() {
+  var tl = _hitGround(-0.94, 0.66), tr = _hitGround(0.94, 0.66), bl = _hitGround(-0.94, -0.56), br = _hitGround(0.94, -0.56);
+  var tc = _hitGround(0, 0.66), bc = _hitGround(0, -0.56);
+  if (!tl || !tr || !bl || !br || !tc || !bc) return;
+  var xHalf = Math.min(Math.abs(tr.x), Math.abs(br.x), Math.abs(tl.x), Math.abs(bl.x)) - 0.4; // narrowest, so always on-screen
+  BOUND.x0 = CFG.fireX - xHalf / K; BOUND.x1 = CFG.fireX + xHalf / K;
+  BOUND.y0 = CFG.fireY + tc.z / K + 10; BOUND.y1 = CFG.fireY + bc.z / K - 10; // tc.z (far) < bc.z (near)
+}
+
 function resize() {
   var r = stage.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height;
   camera.updateProjectionMatrix();
+  computeBounds();
 }
 window.addEventListener('resize', resize);
+resize();
 
 // lights: dim cold ambient so shadows read as blue-black, plus the fire
 var ambient = new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.5);
@@ -102,7 +119,7 @@ for (var st = 0; st < 16; st++) {
 var boundR = wr(ARENA);
 var boundary = new THREE.Mesh(new THREE.RingGeometry(boundR - 0.06, boundR + 0.06, 72),
   new THREE.MeshBasicMaterial({ color: 0x6a5a8a, transparent: true, opacity: 0.14, side: THREE.DoubleSide }));
-boundary.rotation.x = -Math.PI / 2; boundary.position.y = 0.02; scene.add(boundary);
+boundary.rotation.x = -Math.PI / 2; boundary.position.y = 0.02; boundary.visible = false; scene.add(boundary);
 
 // fire strength/range ring: sits at the fire's effective edge, grows + brightens
 // with fuel so the protected zone (warmth + burn) is always legible
@@ -187,6 +204,12 @@ var torchFlame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10),
 torchFlame.position.set(0.46, 0.18, 0.14); torchGrp.add(torchFlame);
 var torchLight = new THREE.PointLight(0xffb060, 1.3, 5, 2);
 torchLight.position.set(0.46, 0.2, 0.14); torchGrp.add(torchLight);
+// chainsaw held in the free hand (shown only while the Chainsaw buff is active)
+var sawGrp = new THREE.Group(); sawGrp.position.set(0, 0.55, 0); hero.add(sawGrp); sawGrp.visible = false;
+var sawBody = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.24), new THREE.MeshStandardMaterial({ color: 0xff5a3a, roughness: 0.6 }));
+sawBody.position.set(-0.32, 0, 0.12); sawBody.castShadow = true; sawGrp.add(sawBody);
+var sawBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.1), new THREE.MeshStandardMaterial({ color: 0xcfd6dc, roughness: 0.5, metalness: 0.4 }));
+sawBar.position.set(-0.66, 0, 0.12); sawGrp.add(sawBar);
 // carried wood on the back
 var carryGrp = new THREE.Group(); hero.add(carryGrp);
 var carryBlocks = [];
@@ -251,7 +274,7 @@ function buildTree(seed) {
 var treeline = new THREE.Group(); scene.add(treeline);
 for (var bl = 0; bl < 22; bl++) {
   var ba = (bl / 22) * TAU() + (bl % 2) * 0.14;
-  var brad = ARENA + 25 + (bl % 3) * 22;
+  var brad = 430 + (bl % 3) * 30;   // well beyond the reachable frame, as a backdrop
   var bp = makePine(bl * 37 + 5, [0x223f28, 0x274a2e, 0x2d5636]);
   bp.position.set(wx(CFG.fireX + Math.cos(ba) * brad), 0, wz(CFG.fireY + Math.sin(ba) * brad));
   bp.scale.multiplyScalar(1.1);
@@ -357,6 +380,7 @@ var Audio2 = (function () {
     fell: function () { noise(0.4, 0.3, 700); tone(120, 0.35, 'sine', 0.14, 55); },
     wood: function () { tone(540, 0.09, 'triangle', 0.16); tone(360, 0.12, 'triangle', 0.1); },
     dump: function () { noise(0.28, 0.22, 900); tone(200, 0.28, 'sawtooth', 0.16, 460); },
+    chainsaw: function () { tone(140, 0.18, 'sawtooth', 0.16, 210); tone(90, 0.2, 'square', 0.1, 130); noise(0.14, 0.12, 1800); },
     crit: function () { tone(720, 0.1, 'square', 0.14, 980); tone(480, 0.14, 'triangle', 0.12); },
     pickup: function () { [660, 880, 1180].forEach(function (f, i) { setTimeout(function () { tone(f, 0.14, 'triangle', 0.18); }, i * 70); }); },
     sizzle: function () { noise(0.14, 0.06, 2600); },
@@ -382,13 +406,16 @@ function upgradeCost(u) { return u.base + u.step * u.lvl; }
 
 // Timed ability pickups that drop from shades and each dawn (Nova is instant).
 var BUFFS = {
-  inferno: { name: 'Inferno', icon: '🔥', color: 0xff7a2b, dur: 12 },
-  swift:   { name: 'Swift',   icon: '💨', color: 0x5fd0ff, dur: 12 },
-  ward:    { name: 'Ward',    icon: '🛡', color: 0x8affc1, dur: 12 },
-  harvest: { name: 'Harvest', icon: '🪓', color: 0xffd24a, dur: 14 },
-  nova:    { name: 'Nova',    icon: '💥', color: 0xffe08a, dur: 0 }
+  inferno:  { name: 'Inferno',  icon: '🔥', color: 0xff7a2b, dur: 12 },
+  swift:    { name: 'Swift',    icon: '💨', color: 0x5fd0ff, dur: 12 },
+  ward:     { name: 'Ward',     icon: '🛡', color: 0x8affc1, dur: 12 },
+  harvest:  { name: 'Harvest',  icon: '🪓', color: 0xffd24a, dur: 14 },
+  chainsaw: { name: 'Chainsaw', icon: '🪚', color: 0xff5a6a, dur: 10 },   // rare: one-shots trees
+  nova:     { name: 'Nova',     icon: '💥', color: 0xffe08a, dur: 0 },    // instant blast
+  toolbelt: { name: 'Toolbelt', icon: '🧰', color: 0xc98a4a, dur: 0 }     // instant, permanent +2 carry
 };
-var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'nova']; // nova rarer
+// inferno/swift/harvest common; ward/nova less so; chainsaw/toolbelt rare (1 each)
+var DROP_POOL = ['inferno', 'swift', 'ward', 'harvest', 'inferno', 'swift', 'harvest', 'nova', 'chainsaw', 'toolbelt'];
 function buffOn(k) { return game.buffs[k] > 0; }
 
 var game = {
@@ -429,10 +456,10 @@ function moveSpeed() { return CFG.survivorSpeed * (1 + (game.mods.speed || 0)) *
 function gatherTime() { return CFG.gatherTime * (game.mods.chop || 1) * (buffOn('harvest') ? 0.5 : 1); }
 
 function spawnTree() {
-  // always inside the reachable arena, not on the bank zone, not overlapping another tree
-  for (var tries = 0; tries < 28; tries++) {
-    var a = rand(0, TAU()), d = rand(95, ARENA - 24);
-    var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
+  // anywhere on the visible frame, off the fire/bank zone, not overlapping another tree
+  for (var tries = 0; tries < 30; tries++) {
+    var x = rand(BOUND.x0 + 22, BOUND.x1 - 22), y = rand(BOUND.y0 + 22, BOUND.y1 - 22);
+    if (dist2(x, y, CFG.fireX, CFG.fireY) < 82 * 82) continue;   // not on the fire
     var ok = true;
     for (var i = 0; i < trees.length; i++) { if (dist2(x, y, trees[i].x, trees[i].y) < 46 * 46) { ok = false; break; } }
     if (!ok) continue;
@@ -442,9 +469,12 @@ function spawnTree() {
   return false;
 }
 function spawnShade(hpMul, spdMul, kind) {
-  // spawn on a ring just outside the arena, so they always march in on-screen
-  var a = rand(0, TAU()), d = ARENA + 20;
-  var x = CFG.fireX + Math.cos(a) * d, y = CFG.fireY + Math.sin(a) * d;
+  // spawn just outside the frame on a random edge, so they march in on-screen
+  var m = 34, x, y, edge = Math.floor(rand(0, 4));
+  if (edge === 0) { x = rand(BOUND.x0, BOUND.x1); y = BOUND.y0 - m; }        // top
+  else if (edge === 1) { x = rand(BOUND.x0, BOUND.x1); y = BOUND.y1 + m; }   // bottom
+  else if (edge === 2) { x = BOUND.x0 - m; y = rand(BOUND.y0, BOUND.y1); }   // left
+  else { x = BOUND.x1 + m; y = rand(BOUND.y0, BOUND.y1); }                   // right
   kind = kind || 'shade';
   var hp, r, spd, bite;
   if (kind === 'brute') { hp = 10 * hpMul; r = 19; spd = rand(15, 22) * spdMul; bite = 7; }   // slow, tanky, hits hard
@@ -470,6 +500,9 @@ function collectDrop(d) {
     triggerFlare(fireRadius() * 2.4, 40);            // instant screen-clearing blast
     for (var i = 0; i < shades.length; i++) { shades[i].hp -= 40; shades[i].hitFlash = 0.2; }
     game.flash = Math.max(game.flash, 0.5); game.shake = Math.max(game.shake, 10);
+  } else if (d.type === 'toolbelt') {
+    game.mods.carry = (game.mods.carry || 0) + 2;    // permanent bigger pack
+    UI.flashCarry();
   } else {
     game.buffs[d.type] = b.dur;                      // (re)start the timed buff
   }
@@ -586,10 +619,9 @@ function update(dt) {
     survivor.y += mvy * moveSpeed() * mag * dt;
     survivor.face = Math.atan2(mvy, mvx); survivor.walk += dt * (6 + mag * 6);
   }
-  // hard radial bound: keep the survivor inside the arena
-  var bdx = survivor.x - CFG.fireX, bdy = survivor.y - CFG.fireY, bd = Math.hypot(bdx, bdy);
-  var maxB = ARENA - 12;
-  if (bd > maxB) { survivor.x = CFG.fireX + bdx / bd * maxB; survivor.y = CFG.fireY + bdy / bd * maxB; }
+  // keep the survivor inside the visible frame (roam anywhere on-screen)
+  survivor.x = clamp(survivor.x, BOUND.x0, BOUND.x1);
+  survivor.y = clamp(survivor.y, BOUND.y0, BOUND.y1);
   // solid trees: push the survivor out of any trunk it overlaps (no walking through)
   for (var ck = 0; ck < trees.length; ck++) {
     var ct = trees[ck];
@@ -606,7 +638,7 @@ function update(dt) {
   var warmthRate;
   if (litByFire) warmthRate = 22;
   else if (buffOn('ward')) warmthRate = 0;   // Ward: immune to the cold
-  else { var coldBase = 7 + game.night * 0.9 + (game.phase === 'night' ? 3 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
+  else { var coldBase = 5 + game.night * 0.7 + (game.phase === 'night' ? 2 : 0); warmthRate = -coldBase * (1 - UPGRADES.coat.lvl * 0.12) * (game.mods.cold || 1); }
   game.warmth = clamp(game.warmth + warmthRate * dt, 0, CFG.warmthMax);
   survivor.chill = 1 - game.warmth / CFG.warmthMax;
   if (game.warmth <= 0) { endGame(false); return; }
@@ -641,7 +673,22 @@ function update(dt) {
     var downstroke = survivor.prevPhase < 0.5 && phase >= 0.5;
     survivor.prevPhase = phase;
 
-    if (choppingTree) {
+    if (choppingTree && buffOn('chainsaw')) {
+      // CHAINSAW: rip the whole tree in one go (grab all its wood at once)
+      var take = Math.min(near.wood, carryCap() - game.carry);
+      if (take > 0) {
+        near.wood -= take; game.carry += take; game.woodPopped += take; near.hit = 0.3;
+        addParticles(near.x, near.y, 20, '#d8a468', 180, 0.5, 3);
+        Audio2.chainsaw(); UI.flashCarry();
+        if (near.wood <= 0) {
+          near.felling = 0.4;
+          addParticles(near.x, near.y, 30, '#6a9a55', 200, 0.75, 3);
+          addParticles(near.x, near.y, 14, '#ffe08a', 170, 0.6, 3);
+          game.shake = Math.max(game.shake, 5);
+        }
+        UI.syncDock();
+      }
+    } else if (choppingTree) {
       if (downstroke) { near.hit = 0.18; addParticles(near.x, near.y, 6, '#d8a468', 100, 0.4, 2); Audio2.chop(); }
       near.chop += dt;
       if (near.chop >= gatherTime()) {
@@ -896,6 +943,9 @@ function renderScene(dt) {
     torchLight.intensity = 1.1 + Math.sin(t * 18) * 0.3;
   }
   torchFlame.scale.set(tf, tf, tf);
+  // chainsaw in hand while its buff is active (vibrates)
+  sawGrp.visible = buffOn('chainsaw');
+  if (sawGrp.visible) { sawGrp.rotation.z = Math.sin(t * 55) * 0.06; sawGrp.position.y = 0.55 + Math.sin(t * 80) * 0.01; }
   // chill tint on cloak
   var chill = survivor.chill;
   cloakMat.color.setRGB(0.91 - chill * 0.28, 0.82 - chill * 0.34, 0.63 + chill * 0.3);
