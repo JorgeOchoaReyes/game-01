@@ -1,0 +1,15 @@
+{
+  "name": "@frankie/game-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The runtime every Frankie game ships in vendor/: loop, input, synth audio, juice, storage and multiplayer rooms.",
+  "main": "index.js",
+  "files": ["index.js", "dist", "src"],
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "three": "0.128.0"
+  }
+}

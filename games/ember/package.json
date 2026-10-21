@@ -1,0 +1,22 @@
+{
+  "name": "@frankie/ember",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ember: the reference game. A single-file, offline, procedural Three.js survival game that every Frankie game follows.",
+  "main": "build.js",
+  "scripts": {
+    "build": "node build.js",
+    "package": "node scripts/package.js",
+    "verify": "node scripts/verify-game3d.js && node scripts/offline-check.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JorgeOchoaReyes/game-01.git"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "docx": "^9.7.1",
+    "playwright": "^1.62.1",
+    "three": "^0.128.0"
+  }
+}

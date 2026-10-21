@@ -1,0 +1,11 @@
+{
+  "name": "@frankie/templates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter games Frankie builds from. Each is one readable index.html that loads vendor/game-kit.js.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node scripts/build.js"
+  }
+}

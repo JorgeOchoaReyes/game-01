@@ -1,5 +1,12 @@
 node_modules/
-scripts/shots/
-*.zip
+.turbo/
+.next/
 dist/
-package-lock.json
+*.zip
+.env*.local
+.env
+next-env.d.ts
+*.tsbuildinfo
+games/ember/scripts/shots/
+apps/web/public/runtime/
+apps/web/public/games/

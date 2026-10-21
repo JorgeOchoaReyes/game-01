@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Campfire</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06040c; overflow: hidden; touch-action: none; user-select: none; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 12px; left: 12px; right: 12px; color: #ffe8cc; font: bold 16px system-ui, sans-serif; pointer-events: none; z-index: 2; }
+  .bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; margin: 4px 0 10px; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #ff5a1f, #ffc24a); }
+  #mute { position: fixed; top: 10px; right: 12px; pointer-events: auto; background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: 16px system-ui; z-index: 3; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="hud"><div>🔥 Fire <span id="time"></span></div><div class="bar"><i id="fuel"></i></div><div id="carry"></div></div>
+<button id="mute" data-kit-ui>🔊</button>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * CAMPFIRE: a Frankie 3D starter, in the style of Ember.
+ * Walk into glowing sticks to pick them up, walk back to the fire to feed it.
+ * Keep the fire alive until dawn. The fire is a real light: everything you can
+ * see, you can see because of it.
+ *
+ * Logic runs on a flat 2D field (x, y). Rendering maps it to the ground plane
+ * (x -> world x, y -> world z), exactly like Ember, so tuning stays simple.
+ */
+var THREE = window.THREE;
+
+var CFG = {
+  speed: 6, carryMax: 4, fuelMax: 100, fuelPerStick: 14, burnRate: 5.5,
+  nightLength: 75, sticks: 7, arena: 14, bankRadius: 2.2
+};
+
+// ---------------------------------------------------------------------------
+// Scene: procedural low-poly world, no model or texture files
+// ---------------------------------------------------------------------------
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06040c);
+scene.fog = new THREE.FogExp2(0x06040c, 0.06);
+var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+
+scene.add(new THREE.HemisphereLight(0x38406a, 0x0a0812, 0.45));
+var fireLight = new THREE.PointLight(0xff8a3a, 4, 30, 1.3);
+fireLight.position.set(0, 1.2, 0); fireLight.castShadow = true; scene.add(fireLight);
+
+var ground = new THREE.Mesh(new THREE.CircleGeometry(40, 48), new THREE.MeshStandardMaterial({ color: 0x1c2a1a, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+function lowPolyTree(x, z) {
+  var g = new THREE.Group();
+  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.8, 6), new THREE.MeshStandardMaterial({ color: 0x4a2f1c }));
+  trunk.position.y = 0.4; g.add(trunk);
+  for (var i = 0; i < 3; i++) {
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.9 - i * 0.22, 1.1, 7), new THREE.MeshStandardMaterial({ color: 0x1f4a2a, flatShading: true }));
+    cone.position.y = 1.1 + i * 0.6; cone.castShadow = true; g.add(cone);
+  }
+  g.position.set(x, 0, z); scene.add(g);
+}
+for (var t = 0; t < 40; t++) { var a = Math.random() * Math.PI * 2, r = Kit.rand(6, CFG.arena + 4); lowPolyTree(Math.cos(a) * r, Math.sin(a) * r); }
+
+var logs = new THREE.Group();
+for (var l = 0; l < 4; l++) {
+  var log = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1, 6), new THREE.MeshStandardMaterial({ color: 0x3a2414 }));
+  log.rotation.z = Math.PI / 2; log.rotation.y = l * Math.PI / 4; log.position.y = 0.1; logs.add(log);
+}
+scene.add(logs);
+var flame = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.9 }));
+flame.position.y = 0.6; scene.add(flame);
+
+var hero = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1, 8), new THREE.MeshStandardMaterial({ color: 0xd9c6a5 }));
+var head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf0d9b5 }));
+head.position.y = 0.68; hero.add(head);
+hero.castShadow = true; scene.add(hero);
+
+var stickGeo = new THREE.BoxGeometry(0.6, 0.1, 0.1);
+var stickMat = new THREE.MeshStandardMaterial({ color: 0xc98a4a, emissive: 0x3a1a00 });
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+var game, player, sticks = [];
+function placeStick(s) {
+  var a = Math.random() * Math.PI * 2, r = Kit.rand(4, CFG.arena);
+  s.x = Math.cos(a) * r; s.y = Math.sin(a) * r; s.mesh.position.set(s.x, 0.1, s.y);
+}
+for (var s = 0; s < CFG.sticks; s++) { var m = new THREE.Mesh(stickGeo, stickMat); scene.add(m); sticks.push({ mesh: m, r: 0.5, x: 0, y: 0 }); }
+
+function reset() {
+  game = { phase: 'play', fuel: CFG.fuelMax * 0.7, carry: 0, time: CFG.nightLength };
+  player = { x: 0, y: 3, r: 0.4 };
+  sticks.forEach(placeStick);
+}
+
+function fireRadius() { return 3 + 9 * (game ? game.fuel / CFG.fuelMax : 0.7); }
+
+function update(dt) {
+  if (!game || game.phase !== 'play') return;
+  var ax = Kit.input.axis(0);
+  player.x += ax.x * CFG.speed * dt; player.y += ax.y * CFG.speed * dt;
+  var d = Math.sqrt(player.x * player.x + player.y * player.y);
+  if (d > CFG.arena) { player.x *= CFG.arena / d; player.y *= CFG.arena / d; }
+
+  for (var i = 0; i < sticks.length; i++) {
+    if (game.carry < CFG.carryMax && Kit.hit(sticks[i], player)) { game.carry++; Kit.audio.sfx.pickup(); placeStick(sticks[i]); }
+  }
+  if (game.carry > 0 && d < CFG.bankRadius) {
+    game.fuel = Math.min(CFG.fuelMax, game.fuel + game.carry * CFG.fuelPerStick);
+    Kit.audio.sfx.win(); game.carry = 0;
+  }
+  game.fuel -= CFG.burnRate * dt;
+  game.time -= dt;
+  if (game.fuel <= 0) end(false);
+  else if (game.time <= 0) end(true);
+}
+
+function end(won) {
+  game.phase = 'over';
+  won ? Kit.audio.sfx.win() : Kit.audio.sfx.lose();
+  Kit.ui.overlay({ title: won ? 'Dawn!' : 'The fire died', body: won ? 'You kept the dark away all night.' : 'Feed it more often. Sticks glow in the dark.', button: 'Again', onClick: reset });
+}
+
+var clock = 0;
+function render(dt) {
+  clock += dt;
+  var f = game ? game.fuel / CFG.fuelMax : 0.7;
+  fireLight.intensity = 1 + f * 4 + Math.sin(clock * 17) * 0.25 + Math.sin(clock * 7) * 0.2;
+  fireLight.distance = fireRadius() * 2.4;
+  flame.scale.set(0.5 + f, 0.5 + f * 1.4 + Math.sin(clock * 12) * 0.08, 0.5 + f);
+  if (player) {
+    hero.position.set(player.x, 0.5, player.y);
+    camera.position.set(player.x * 0.6, 11, player.y * 0.6 + 8);
+    camera.lookAt(player.x * 0.6, 0, player.y * 0.6 - 1);
+  } else { camera.position.set(0, 11, 8); camera.lookAt(0, 0, -1); }
+  for (var i = 0; i < sticks.length; i++) sticks[i].mesh.rotation.y += dt;
+  renderer.render(scene, camera);
+
+  if (game) {
+    document.getElementById('fuel').style.width = Math.max(f, 0) * 100 + '%';
+    document.getElementById('time').textContent = '· dawn in ' + Math.ceil(Math.max(game.time, 0)) + 's';
+    document.getElementById('carry').textContent = '🪵 ' + game.carry + ' / ' + CFG.carryMax;
+  }
+}
+
+function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+var muteBtn = document.getElementById('mute');
+muteBtn.textContent = Kit.audio.muted ? '🔇' : '🔊';
+muteBtn.onclick = function () { muteBtn.textContent = Kit.audio.toggle() ? '🔇' : '🔊'; };
+
+Kit.ui.overlay({ title: 'Campfire', body: 'Drag (or WASD) to walk. Grab glowing sticks, bring them back to the fire. Survive until dawn.', button: 'Start the night', onClick: reset });
+Kit.loop(update, render);
+</script>
+</body>
+</html>
