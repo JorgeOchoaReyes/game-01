@@ -68,8 +68,8 @@ pnpm --filter @frankie/ember package   # Ember's original submission zip
 
 ### Deploying
 
-- `apps/web` deploys to Vercel or any host that runs Node. Set the root directory to `apps/web`, and Turbo
-  builds the workspace packages first.
+- `apps/web` deploys to Vercel. In the Vercel project settings, set **Root Directory** to `apps/web`.
+  `apps/web/vercel.json` then builds the workspace packages through Turbo before `next build`.
 - `apps/relay` needs a host that keeps WebSockets open (Fly.io, Render, Railway or a small VM). Set
   `NEXT_PUBLIC_RELAY_URL=wss://your-relay` on the web app.
 
