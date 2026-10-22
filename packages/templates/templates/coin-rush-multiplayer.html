@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Coin Rush</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c1020; overflow: hidden; touch-action: none; user-select: none; font-family: system-ui, sans-serif; }
+  #hud { position: fixed; top: 10px; left: 12px; right: 12px; color: #fff; font-weight: bold; pointer-events: none; z-index: 2; display: flex; justify-content: space-between; gap: 8px; }
+  #board span { display: inline-block; margin-right: 10px; }
+  #invite { pointer-events: auto; background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: inherit; cursor: pointer; display: none; }
+  .choices { display: flex; flex-direction: column; gap: 10px; }
+  .choices button { padding: 14px 24px; font: bold 17px system-ui; border: 0; border-radius: 999px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><div id="board"></div><button id="invite" data-kit-ui>Copy invite link</button></div>
+
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * COIN RUSH: a Polly multiplayer starter.
+ *
+ * Two ways to play:
+ *   Online  - everyone opens the same invite link (?room=CODE). Uses Kit.net.
+ *   Couch   - 2 players on one keyboard (WASD vs arrows). No network at all.
+ *
+ * Online model (simple and cheat-tolerant enough for friends):
+ *   - each player owns their own position and sends it ~15x a second
+ *   - the HOST (Kit.net.isHost(): first to join) owns the coins and the scores,
+ *     and broadcasts them whenever they change
+ *   - non-hosts tell the host "I touched coin #n"; the host decides
+ * If the host leaves, the next lowest id becomes host automatically.
+ */
+var CFG = { w: 540, h: 960, speed: 300, r: 20, coins: 6, coinR: 13, winScore: 15, sendRate: 1 / 15 };
+var COLORS = ['#ff8a3a', '#8ad7ff', '#8affc1', '#ff6ad5', '#ffe36e', '#b48aff', '#ff6a6a', '#ffffff'];
+
+var view = Kit.canvas({ width: CFG.w, height: CFG.h });
+var ctx = view.ctx;
+
+var mode = null;           // 'online' | 'couch'
+var players = {};          // id -> { x, y, color, score, name }
+var coins = [];
+var me = null;             // my id (online) or null (couch)
+var sendT = 0, over = false;
+
+function newCoin() { return { x: Kit.rand(40, CFG.w - 40), y: Kit.rand(120, CFG.h - 40), r: CFG.coinR }; }
+function resetCoins() { coins = []; for (var i = 0; i < CFG.coins; i++) coins.push(newCoin()); }
+function colorFor(id) { var ids = Object.keys(players).sort(); return COLORS[Math.max(ids.indexOf(id), 0) % COLORS.length]; }
+function addPlayer(id, name) {
+  if (!players[id]) players[id] = { x: Kit.rand(80, CFG.w - 80), y: CFG.h - 140, score: 0, r: CFG.r, name: name || 'P' };
+  for (var k in players) players[k].color = colorFor(k);
+}
+
+// ---------------------------------------------------------------------------
+// Couch mode: 2 local players, no network
+// ---------------------------------------------------------------------------
+function startCouch() {
+  mode = 'couch';
+  Kit.input.setPlayers(2);
+  players = {}; addPlayer('p1', 'P1'); addPlayer('p2', 'P2');
+  players.p1.x = CFG.w * 0.3; players.p2.x = CFG.w * 0.7;
+  resetCoins();
+}
+
+// ---------------------------------------------------------------------------
+// Online mode: Kit.net room
+// ---------------------------------------------------------------------------
+function hostBroadcast() {
+  var scores = {}; for (var id in players) scores[id] = players[id].score;
+  Kit.net.send('world', { coins: coins, scores: scores });
+}
+
+function startOnline() {
+  mode = 'online';
+  players = {};
+  Kit.net.connect({ game: 'coin-rush' });
+  Kit.net.on('open', function (info) {
+    me = info.id;
+    addPlayer(me, 'You');
+    info.peers.forEach(function (p) { addPlayer(p, 'P'); });
+    if (Kit.net.isHost()) resetCoins();
+    var btn = document.getElementById('invite');
+    btn.style.display = 'block';
+    btn.textContent = 'Room ' + info.room + ' · copy invite';
+    btn.onclick = function () {
+      try { navigator.clipboard.writeText(Kit.net.inviteLink()); btn.textContent = 'Copied!'; } catch (e) { prompt('Share this link', Kit.net.inviteLink()); }
+    };
+  });
+  Kit.net.on('join', function (id) { addPlayer(id, 'P'); Kit.audio.sfx.blip(); if (Kit.net.isHost()) hostBroadcast(); });
+  Kit.net.on('leave', function (id) { delete players[id]; for (var k in players) players[k].color = colorFor(k); if (Kit.net.isHost() && !coins.length) resetCoins(); });
+  Kit.net.on('pos', function (d, from) { addPlayer(from); players[from].x = d.x; players[from].y = d.y; });
+  Kit.net.on('grab', function (d, from) {
+    if (!Kit.net.isHost() || !coins[d.i] || !players[from]) return;
+    if (Kit.dist(coins[d.i].x, coins[d.i].y, d.x, d.y) > 40) return;   // stale claim
+    collect(from, d.i);
+  });
+  Kit.net.on('world', function (d) {
+    coins = d.coins;
+    for (var id in d.scores) if (players[id]) players[id].score = d.scores[id];
+    checkWin();
+  });
+  Kit.net.on('error', function () {
+    Kit.ui.overlay({ title: 'No relay', body: 'Could not reach the multiplayer relay. Run <code>pnpm --filter @polly/relay dev</code> or open the game with <code>?relay=wss://your-relay</code>.', button: 'Play couch mode', onClick: startCouch });
+  });
+}
+
+function collect(id, i) {
+  var c = coins[i];
+  players[id].score++;
+  Kit.audio.sfx.pickup(); Kit.fx.burst(c.x, c.y, 12, '#ffe36e', 150, 0.5, 4);
+  coins[i] = newCoin();
+  if (mode === 'online') hostBroadcast();
+  checkWin();
+}
+
+function checkWin() {
+  if (over) return;
+  for (var id in players) {
+    if (players[id].score >= CFG.winScore) {
+      over = true;
+      var mine = mode === 'online' ? id === me : true;
+      mine ? Kit.audio.sfx.win() : Kit.audio.sfx.lose();
+      var who = mode === 'online' ? (id === me ? 'You win!' : 'They win!') : players[id].name + ' wins!';
+      Kit.ui.overlay({ title: who, body: 'First to ' + CFG.winScore + ' coins.', button: 'Rematch', onClick: rematch });
+      return;
+    }
+  }
+}
+
+function rematch() {
+  over = false;
+  for (var id in players) players[id].score = 0;
+  if (mode === 'couch' || Kit.net.isHost()) { resetCoins(); if (mode === 'online') hostBroadcast(); }
+}
+
+// ---------------------------------------------------------------------------
+// Loop
+// ---------------------------------------------------------------------------
+function move(p, a, dt) {
+  p.x = Kit.clamp(p.x + a.x * CFG.speed * dt, p.r, CFG.w - p.r);
+  p.y = Kit.clamp(p.y + a.y * CFG.speed * dt, 70 + p.r, CFG.h - p.r);
+}
+
+function update(dt) {
+  if (!mode || over) return;
+  if (mode === 'couch') {
+    move(players.p1, Kit.input.axis(0), dt);
+    move(players.p2, Kit.input.axis(1), dt);
+    ['p1', 'p2'].forEach(function (id) { for (var i = 0; i < coins.length; i++) if (Kit.hit(coins[i], players[id])) collect(id, i); });
+    return;
+  }
+  if (!me || !players[me]) return;
+  var p = players[me];
+  move(p, Kit.input.axis(0), dt);
+  sendT -= dt;
+  if (sendT <= 0) { Kit.net.send('pos', { x: Math.round(p.x), y: Math.round(p.y) }); sendT = CFG.sendRate; }
+  for (var i = 0; i < coins.length; i++) {
+    if (!Kit.hit(coins[i], p)) continue;
+    if (Kit.net.isHost()) collect(me, i);
+    else if (!coins[i].claimed) { coins[i].claimed = true; Kit.net.send('grab', { i: i, x: coins[i].x, y: coins[i].y }); }
+  }
+}
+
+function render() {
+  ctx.fillStyle = '#0c1020'; ctx.fillRect(0, 0, CFG.w, CFG.h);
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  for (var gx = 0; gx < CFG.w; gx += 45) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, CFG.h); ctx.stroke(); }
+  for (var gy = 0; gy < CFG.h; gy += 45) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(CFG.w, gy); ctx.stroke(); }
+
+  for (var i = 0; i < coins.length; i++) {
+    var c = coins[i];
+    ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(c.x - 3, c.y - 3, c.r * 0.35, 0, Math.PI * 2); ctx.fill();
+  }
+  for (var id in players) {
+    var p = players[id];
+    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    if (id === me || mode === 'couch') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); }
+  }
+  Kit.fx.draw(ctx);
+
+  var html = '';
+  for (var pid in players) html += '<span style="color:' + players[pid].color + '">● ' + (pid === me ? 'You' : players[pid].name) + ' ' + players[pid].score + '</span>';
+  document.getElementById('board').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Boot: choose a mode. Arriving from an invite link jumps straight online.
+// ---------------------------------------------------------------------------
+if (Kit.net.hasInvite()) startOnline();
+else {
+  var menu = Kit.ui.overlay({ title: 'Coin Rush', body: 'First to ' + CFG.winScore + ' coins wins. Drag or use WASD / arrows.' });
+  var box = Kit.ui.el('div', { class: 'choices' });
+  var online = Kit.ui.el('button', { style: 'background:#8ad7ff' }, '🌐 Play online');
+  var couch = Kit.ui.el('button', { style: 'background:#ff8a3a' }, '🛋️ 2 players, 1 keyboard');
+  online.onclick = function () { menu.remove(); startOnline(); };
+  couch.onclick = function () { menu.remove(); startCouch(); };
+  box.appendChild(online); box.appendChild(couch); menu.appendChild(box);
+}
+Kit.loop(update, render);
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**",
+        "index.html"
+      ],
+      "env": [
+        "DATABASE_URL",
+        "POLLY_AUTH_SECRET",
+        "POLLY_PUBLIC_URL",
+        "FRANKIE_JWT_SECRET",
+        "NEXT_PUBLIC_FRANKIE_PUBLISHABLE_KEY",
+        "NEXT_PUBLIC_FRANKIE_URL",
+        "NEXT_PUBLIC_RELAY_URL"
+      ]
+    },
+    "dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {},
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ]
+    }
+  }
+}
