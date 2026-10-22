@@ -1,5 +1,5 @@
 /*
- * game-kit.js: the tiny runtime every Frankie game loads from vendor/game-kit.js.
+ * game-kit.js: the tiny runtime every Polly game loads from vendor/game-kit.js.
  *
  * It packages the habits Ember was built on so a new game only has to write the
  * fun part:
@@ -9,7 +9,7 @@
  *   Kit.audio    synthesized sound effects (no audio files), with a saved mute toggle
  *   Kit.fx       screen shake + particles + floating text
  *   Kit.store    localStorage that never throws (best scores, "seen tutorial")
- *   Kit.net      online multiplayer rooms through the Frankie relay
+ *   Kit.net      online multiplayer rooms through the Polly relay
  *
  * Plain ES5, no build step, no network unless the game opts into Kit.net.
  */
@@ -292,7 +292,7 @@
   };
 
   // -------------------------------------------------------------------------
-  // Kit.net: online multiplayer rooms over the Frankie relay (WebSocket)
+  // Kit.net: online multiplayer rooms over the Polly relay (WebSocket)
   // -------------------------------------------------------------------------
   // The relay only forwards messages; each game decides who is authoritative.
   // A common pattern: the lowest id in the room ("host") runs the world and

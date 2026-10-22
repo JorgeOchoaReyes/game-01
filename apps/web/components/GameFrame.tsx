@@ -24,8 +24,8 @@ export function GameFrame({ html, runKey = 0, room, inviteBase, onError }: Props
   useEffect(() => {
     if (!onError) return;
     const listen = (e: MessageEvent) => {
-      if (e.source === ref.current?.contentWindow && e.data && typeof e.data.frankieError === "string") {
-        onError(e.data.frankieError);
+      if (e.source === ref.current?.contentWindow && e.data && typeof e.data.pollyGameError === "string") {
+        onError(e.data.pollyGameError);
       }
     };
     window.addEventListener("message", listen);

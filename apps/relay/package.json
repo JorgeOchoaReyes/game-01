@@ -1,8 +1,8 @@
 {
-  "name": "@frankie/relay",
+  "name": "@polly/relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Multiplayer relay for Frankie games: WebSocket rooms that forward messages between players.",
+  "description": "Multiplayer relay for Polly games: WebSocket rooms that forward messages between players.",
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",

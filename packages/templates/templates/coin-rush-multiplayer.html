@@ -21,7 +21,7 @@
 <script>
 "use strict";
 /*
- * COIN RUSH: a Frankie multiplayer starter.
+ * COIN RUSH: a Polly multiplayer starter.
  *
  * Two ways to play:
  *   Online  - everyone opens the same invite link (?room=CODE). Uses Kit.net.
@@ -103,7 +103,7 @@ function startOnline() {
     checkWin();
   });
   Kit.net.on('error', function () {
-    Kit.ui.overlay({ title: 'No relay', body: 'Could not reach the multiplayer relay. Run <code>pnpm --filter @frankie/relay dev</code> or open the game with <code>?relay=wss://your-relay</code>.', button: 'Play couch mode', onClick: startCouch });
+    Kit.ui.overlay({ title: 'No relay', body: 'Could not reach the multiplayer relay. Run <code>pnpm --filter @polly/relay dev</code> or open the game with <code>?relay=wss://your-relay</code>.', button: 'Play couch mode', onClick: startCouch });
   });
 }
 

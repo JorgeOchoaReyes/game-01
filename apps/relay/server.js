@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Frankie relay: the smallest server that makes Kit.net multiplayer work.
+ * Polly relay: the smallest server that makes Kit.net multiplayer work.
  *
  * Players connect to ws://host:PORT/?room=CODE. The relay never runs game
  * logic; it only forwards { t:'msg', type, data, to? } between players in the
@@ -81,5 +81,5 @@ module.exports = { createRelay };
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 8787);
-  createRelay().server.listen(port, () => console.log(`Frankie relay listening on ws://localhost:${port}`));
+  createRelay().server.listen(port, () => console.log(`Polly relay listening on ws://localhost:${port}`));
 }

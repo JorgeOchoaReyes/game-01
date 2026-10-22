@@ -22,8 +22,8 @@ export function preparePreview(html: string, opts: PreviewOptions = {}): string 
   if (opts.inviteBase) globals.GAMEKIT_INVITE_BASE = opts.inviteBase;
 
   const errorHook = opts.reportErrors
-    ? `window.addEventListener('error',function(e){parent.postMessage({frankieError:String(e.message)+(e.lineno?' (line '+e.lineno+')':'')},'*')});` +
-      `window.addEventListener('unhandledrejection',function(e){parent.postMessage({frankieError:String(e.reason)},'*')});`
+    ? `window.addEventListener('error',function(e){parent.postMessage({pollyGameError:String(e.message)+(e.lineno?' (line '+e.lineno+')':'')},'*')});` +
+      `window.addEventListener('unhandledrejection',function(e){parent.postMessage({pollyGameError:String(e.reason)},'*')});`
     : "";
 
   const head =

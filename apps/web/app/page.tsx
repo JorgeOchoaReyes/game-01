@@ -1,34 +1,35 @@
 import Link from "next/link";
 import { EMBER, TEMPLATES } from "@/lib/catalog";
+import { RemixButton } from "@/components/RemixButton";
 
 export default function Home() {
   return (
     <main>
       <section className="hero wrap">
         <h1>
-          Make a game by <em>talking to Frankie</em>
+          Make a game. <em>Play it right away.</em>
         </h1>
         <p>
-          Describe it. Frankie builds it, you play it right here, then keep asking for changes. Add a friend
-          online. Download it as a zip that runs anywhere.
+          Polly is a tiny game engine and a home for your games. Tell Frankie what you want and it builds the game
+          with you while you play it. Then share it, play online with friends, or download it.
         </p>
-        <form action="/create" method="get">
-          <input name="idea" placeholder="A cat that rides a rocket and collects fish…" aria-label="Describe your game" required />
-          <button className="btn primary" type="submit">Build it</button>
-        </form>
+        <div className="actions" style={{ justifyContent: "center", display: "flex", gap: 10 }}>
+          <Link className="btn primary" href="/studio">Open the studio</Link>
+          <Link className="btn" href="/games">Play games</Link>
+        </div>
       </section>
 
       <section className="section wrap">
         <div className="steps">
-          <div className="card"><b>1 · Describe</b><p>Say what you want in plain words. Frankie starts from a starter that already works.</p></div>
-          <div className="card"><b>2 · Play</b><p>The game runs live next to the chat. If it breaks, one click asks Frankie to fix it.</p></div>
-          <div className="card"><b>3 · Share</b><p>Download a zip (index.html + vendor/), or play online with friends using a room code.</p></div>
+          <div className="card"><b>1 · Describe</b><p>Chat with Frankie. Every game starts from a starter that already works.</p></div>
+          <div className="card"><b>2 · Play</b><p>The game reloads next to the chat each time Frankie saves. Broken? One click asks for a fix.</p></div>
+          <div className="card"><b>3 · Share</b><p>Make it public for a play link, invite friends with a room code, or download the zip.</p></div>
         </div>
       </section>
 
       <section className="section wrap">
         <h2>Start from an example</h2>
-        <p>Every Frankie game follows the same practices as Ember, our reference game.</p>
+        <p>Every Polly game follows the same practices as Ember, our reference game.</p>
         <div className="grid">
           <div className="card feature">
             <div className="emoji">{EMBER.emoji}</div>
@@ -50,14 +51,14 @@ export default function Home() {
               <p>{t.blurb}</p>
               <div className="actions">
                 <Link className="btn small" href={`/play/${t.id}`}>Play</Link>
-                <Link className="btn primary small" href={`/create?template=${t.id}`}>Remix with Frankie</Link>
+                <RemixButton starter={t.id} />
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <footer className="footer">Frankie · games are single readable files you own.</footer>
+      <footer className="footer">Polly · games are single readable files you own.</footer>
     </main>
   );
 }

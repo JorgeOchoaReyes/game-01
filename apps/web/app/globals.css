@@ -101,3 +101,23 @@ button { font: inherit; color: inherit; }
   .card.feature { flex-direction: column; align-items: flex-start; }
   .hero form { flex-direction: column; }
 }
+
+/* auth */
+.auth { display: flex; justify-content: center; padding: 56px 16px; }
+.auth form { width: 100%; max-width: 400px; gap: 14px; }
+.auth h1 { margin: 0; font-size: 28px; }
+.auth label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+.auth input { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-weight: 400; }
+.muted { color: var(--muted); margin: 0; }
+.small { font-size: 14px; }
+.form-error { color: var(--bad); margin: 0; }
+.linklike { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; }
+.linklike:hover { color: var(--text); }
+.nav .links { align-items: center; }
+.inline-form { display: inline; margin: 0; }
+.setup { margin: auto; max-width: 380px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.setup h3 { margin: 0; }
+.setup p { color: var(--muted); margin: 0; font-size: 14px; }
+.chat-wrap { min-height: 0; flex: 1; display: flex; }
+.toolbar select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font: inherit; max-width: 200px; }
+.saved { font-size: 13px; color: var(--good); }

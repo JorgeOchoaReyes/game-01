@@ -1,8 +1,8 @@
 {
-  "name": "@frankie/game-kit",
+  "name": "@polly/game-kit",
   "version": "0.1.0",
   "private": true,
-  "description": "The runtime every Frankie game ships in vendor/: loop, input, synth audio, juice, storage and multiplayer rooms.",
+  "description": "The runtime every Polly game ships in vendor/: loop, input, synth audio, juice, storage and multiplayer rooms.",
   "main": "index.js",
   "files": ["index.js", "dist", "src"],
   "scripts": {

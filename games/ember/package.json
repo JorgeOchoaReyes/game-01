@@ -1,5 +1,5 @@
 {
-  "name": "@frankie/ember",
+  "name": "@polly/ember",
   "version": "1.0.0",
   "private": true,
   "description": "Ember: the reference game. A single-file, offline, procedural Three.js survival game that every Frankie game follows.",

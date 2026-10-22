@@ -10,3 +10,6 @@ next-env.d.ts
 games/ember/scripts/shots/
 apps/web/public/runtime/
 apps/web/public/games/
+
+# local PGlite database
+apps/web/.data/
