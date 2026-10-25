@@ -77,7 +77,7 @@ export function openApiDocument(origin: string) {
           tags: ["games"],
           summary: "Create a game",
           description:
-            "Creates a game for the user from a starter (starterId, preferred) or from a complete html file. Returns the game with its outline; then change it with editGame. The user can open it at studioUrl.",
+            "Creates a game or video for the user from a starter (starterId, preferred) or from a complete html file. Returns it with its outline; then change it with editGame. The user can open it at studioUrl.",
           requestBody: body({
             type: "object",
             additionalProperties: false,
@@ -85,6 +85,7 @@ export function openApiDocument(origin: string) {
               starterId: { type: "string", description: "A starter id from listStarters.", example: "star-catcher" },
               title: { type: "string", maxLength: 80, description: "The game's name.", example: "Fish Rocket" },
               html: { type: "string", description: "A complete index.html. Only when no starter fits; overrides starterId." },
+              format: { type: "string", enum: ["portrait", "landscape", "square"], description: "Video starters only: 9:16 short (portrait), 16:9 or square." },
             },
           }),
           responses: { "201": ok("The new game", ref("GameWithOutline")), "400": err("Missing starterId/html, or html is not a game file."), "401": E401, "422": err("html has a JavaScript syntax error.") },

@@ -60,7 +60,9 @@
     var el = opts.canvas || document.getElementById(opts.id || 'c');
     if (!el) { el = document.createElement('canvas'); el.id = opts.id || 'c'; document.body.appendChild(el); }
     var ctx = opts.webgl ? null : el.getContext('2d');
-    var view = { canvas: el, ctx: ctx, width: w, height: h, scale: 1, dpr: 1, left: 0, top: 0 };
+    // minPixels: while recording, the canvas keeps at least this many pixels per
+    // logical unit, so a video is crisp however small the window is
+    var view = { canvas: el, ctx: ctx, width: w, height: h, scale: 1, dpr: 1, left: 0, top: 0, minPixels: 0 };
 
     function fit() {
       var vw = global.innerWidth, vh = global.innerHeight;
@@ -73,8 +75,9 @@
       view.left = Math.round((vw - w * s) / 2); view.top = Math.round((vh - h * s) / 2);
       el.style.left = view.left + 'px'; el.style.top = view.top + 'px';
       if (ctx) {
-        el.width = Math.round(w * s * dpr); el.height = Math.round(h * s * dpr);
-        ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+        var k = Math.max(s * dpr, view.minPixels);
+        el.width = Math.round(w * k); el.height = Math.round(h * k);
+        ctx.setTransform(k, 0, 0, k, 0, 0);
       }
       if (opts.onResize) opts.onResize(view);
     }
@@ -82,6 +85,7 @@
     view.toGame = function (cx, cy) { return { x: (cx - view.left) / view.scale, y: (cy - view.top) / view.scale }; };
     global.addEventListener('resize', fit);
     fit();
+    view.fit = fit;
     Kit.view = view;
     return view;
   };
@@ -211,7 +215,7 @@
   // -------------------------------------------------------------------------
   // Kit.audio: every sound is synthesized, like Ember's chiptune and SFX
   // -------------------------------------------------------------------------
-  var ac = null, master = null, muted = Kit.store.get('muted', false);
+  var ac = null, master = null, streamOut = null, muted = Kit.store.get('muted', false);
   function ensureAudio() {
     if (ac) return true;
     try {
@@ -258,6 +262,12 @@
       boom: function () { Kit.audio.noise({ dur: 0.5, cutoff: 600, vol: 0.6 }); },
       win: function () { [523, 659, 784, 1046].forEach(function (f, i) { Kit.audio.tone({ freq: f, dur: 0.18, delay: i * 0.11, type: 'triangle', vol: 0.25 }); }); },
       lose: function () { [392, 330, 262, 196].forEach(function (f, i) { Kit.audio.tone({ freq: f, dur: 0.22, delay: i * 0.14, type: 'sawtooth', vol: 0.15 }); }); }
+    },
+    // every Kit sound as a MediaStream, for recording video with sound
+    stream: function () {
+      if (!ensureAudio() || !ac.createMediaStreamDestination) return null;
+      if (!streamOut) { streamOut = ac.createMediaStreamDestination(); master.connect(streamOut); }
+      return streamOut.stream;
     },
     _unlock: function () { if (ensureAudio() && ac.state === 'suspended') ac.resume(); }
   };
@@ -394,6 +404,303 @@
   };
 
   // -------------------------------------------------------------------------
+  // Kit.film: a timeline for animations and explainer videos
+  // -------------------------------------------------------------------------
+  // scenes: [{ dur, caption, enter(), draw(ctx, t, p, film) }]. t is seconds into
+  // the scene and p its progress 0..1. Captions and scene fades are drawn on the
+  // canvas, so they end up in a recorded video. Run it with
+  // Kit.loop(film.update, film.render).
+  Kit.film = function (scenes, opts) {
+    opts = opts || {};
+    var total = 0;
+    for (var i = 0; i < scenes.length; i++) { scenes[i].baseDur = scenes[i].dur; total += scenes[i].dur; }
+    // A film keeps to the real clock, not the game loop's capped dt: under load
+    // (recording, a slow machine) frames drop but the film still lasts as long
+    // as it should, so a recording is never cut short.
+    var lastAt = 0, endHooks = [], voiceSrc = null;
+    function now() { return global.performance ? global.performance.now() : Date.now(); }
+    function hush() { if (voiceSrc) { try { voiceSrc.stop(); } catch (e) { /* already stopped */ } voiceSrc = null; } }
+    var film = {
+      time: 0, duration: total, playing: false, index: -1, scenes: scenes,
+      play: function () { Kit.audio._unlock(); if (film.time >= total) film.seek(0); film.playing = true; lastAt = now(); },
+      pause: function () { film.playing = false; hush(); },
+      toggle: function () { film.playing ? film.pause() : film.play(); return film.playing; },
+      seek: function (t) { hush(); film.time = Kit.clamp(t, 0, total); film.index = -1; lastAt = now(); },
+      restart: function () { film.seek(0); film.play(); },
+      // run fn once, the next time the film reaches its end
+      onceEnded: function (fn) { endHooks.push(fn); },
+      // narration: [{ scene, data: ArrayBuffer (mp3) }]. Each clip plays as its
+      // scene starts, and a scene grows to fit its clip. null removes it.
+      setVoice: function (clips, done) {
+        hush();
+        scenes.forEach(function (sc) { sc.voice = null; sc.dur = sc.baseDur; });
+        var pending = (clips || []).length;
+        function settle() {
+          total = 0;
+          scenes.forEach(function (sc) { total += sc.dur; });
+          film.duration = total;
+          if (film.time > total) film.time = total;
+          if (done) done(film);
+        }
+        if (!pending || !ensureAudio()) return settle();
+        clips.forEach(function (c) {
+          var sc = scenes[c.scene];
+          if (!sc) { if (!--pending) settle(); return; }
+          ac.decodeAudioData(c.data.slice(0), function (buf) {
+            sc.voice = buf;
+            sc.dur = Math.max(sc.baseDur, buf.duration + 0.8);
+            if (!--pending) settle();
+          }, function () { if (!--pending) settle(); });
+        });
+      },
+      update: function () {
+        if (!film.playing) return;
+        var t = now();
+        film.time += Math.min((t - lastAt) / 1000, 1);
+        lastAt = t;
+        if (film.time >= total) {
+          film.time = total; film.playing = false;
+          var hooks = endHooks; endHooks = [];
+          hooks.forEach(function (fn) { fn(film); });
+          if (opts.loop) film.restart(); else if (opts.onEnd) opts.onEnd(film);
+        }
+      },
+      render: function () {
+        var view = Kit.view, ctx = view && view.ctx;
+        if (!ctx) return;
+        var t = Math.min(film.time, total - 1e-6), k = 0;
+        while (k < scenes.length - 1 && t >= scenes[k].dur) { t -= scenes[k].dur; k++; }
+        var sc = scenes[k], next = scenes[k + 1];
+        if (k !== film.index) {
+          film.index = k;
+          if (sc.enter && film.playing) sc.enter(film);
+          // the scene's narration, a beat after the cut
+          if (sc.voice && film.playing && ensureAudio()) {
+            hush();
+            voiceSrc = ac.createBufferSource(); voiceSrc.buffer = sc.voice;
+            var vg = ac.createGain(); vg.gain.value = 1.6;
+            voiceSrc.connect(vg); vg.connect(master); voiceSrc.start(ac.currentTime + 0.15);
+          }
+        }
+        ctx.save(); sc.draw(ctx, t, Math.min(t / sc.dur, 1), film); ctx.restore();
+        // crossfade into the next scene; fade from and to black at the very ends
+        var fade = opts.fade === undefined ? 0.45 : opts.fade, left = sc.dur - t;
+        if (fade && next && left < fade) {
+          ctx.save(); ctx.globalAlpha = 1 - left / fade; next.draw(ctx, 0, 0, film); ctx.restore();
+        }
+        var black = 0;
+        if (fade && k === 0 && t < fade) black = 1 - t / fade;
+        if (fade && !next && left < fade) black = 1 - left / fade;
+        post(ctx, view, opts);
+        if (black) { ctx.fillStyle = 'rgba(0,0,0,' + black + ')'; ctx.fillRect(0, 0, view.width, view.height); }
+        if (sc.caption) {
+          if (opts.captions === 'bar') caption(ctx, view, sc.caption, Kit.clamp(Math.min(t, left) / 0.5, 0, 1));
+          else popCaption(ctx, view, sc.caption, t, sc.dur);
+        }
+      }
+    };
+    Kit._film = film;
+    return film;
+  };
+
+  // Finishing touches over every frame: a vignette that pulls the eye in, and a
+  // little film grain so flat colours don't look sterile. opts.vignette /
+  // opts.grain = false turn them off.
+  var grainTile = null;
+  function post(ctx, view, opts) {
+    var w = view.width, h = view.height;
+    if (opts.vignette !== false) {
+      var g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.5)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+    if (opts.grain !== false) {
+      if (!grainTile) {
+        grainTile = document.createElement('canvas'); grainTile.width = grainTile.height = 128;
+        var gc = grainTile.getContext('2d'), img = gc.createImageData(128, 128);
+        for (var i = 0; i < img.data.length; i += 4) { var v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 22; }
+        gc.putImageData(img, 0, 0);
+      }
+      ctx.save();
+      ctx.fillStyle = ctx.createPattern(grainTile, 'repeat');
+      ctx.translate(-Math.random() * 128, -Math.random() * 128);
+      ctx.fillRect(0, 0, w + 128, h + 128);
+      ctx.restore();
+    }
+  }
+
+  // Shorts-style captions: a few words at a time, big and outlined, popping in
+  // as they're "said" across the scene. *Starred* words are highlighted.
+  var captionCache = {};
+  function captionChunks(text) {
+    if (captionCache[text]) return captionCache[text];
+    var words = String(text).split(/\s+/).filter(Boolean), chunks = [], cur = [];
+    for (var i = 0; i < words.length; i++) {
+      cur.push(words[i]);
+      var end = /[.,:;!?]\**$/.test(words[i]);
+      if (cur.length >= 3 || end || i === words.length - 1) { chunks.push(cur); cur = []; }
+    }
+    return (captionCache[text] = chunks);
+  }
+  function popCaption(ctx, view, text, t, dur) {
+    var chunks = captionChunks(text), total = 0, i;
+    for (i = 0; i < chunks.length; i++) total += chunks[i].length + 1;
+    // speak from just after the scene starts to just before it ends
+    var start = Math.min(0.25, dur * 0.05), span = Math.max(dur - start - 0.35, 0.5);
+    var at = (t - start) / span * total, k = 0, acc = 0;
+    if (at < 0) return;
+    while (k < chunks.length - 1 && at >= acc + chunks[k].length + 1) { acc += chunks[k].length + 1; k++; }
+    var since = (at - acc) / total * span, words = chunks[k];
+    var tall = view.height > view.width, short = Math.min(view.width, view.height);
+    var size = Math.round(short * (tall ? 0.082 : 0.058)), maxW = view.width * 0.88;
+    var pop = Math.min(since / 0.12, 1), scale = 0.82 + 0.18 * (1 - Math.pow(1 - pop, 3));
+    ctx.save();
+    ctx.font = '900 ' + size + 'px system-ui, sans-serif';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
+    // lay the words out in up to two lines
+    var lines = [[]], widths = [0], space = ctx.measureText(' ').width;
+    for (i = 0; i < words.length; i++) {
+      var word = words[i].replace(/\*/g, ''), ww = ctx.measureText(word).width, L = lines.length - 1;
+      if (widths[L] && widths[L] + space + ww > maxW) { lines.push([]); widths.push(0); L++; }
+      lines[L].push({ text: word, hot: /\*/.test(words[i]), w: ww });
+      widths[L] += (widths[L] ? space : 0) + ww;
+    }
+    var lh = size * 1.12, cy = tall ? view.height * 0.66 : view.height * 0.8;
+    ctx.translate(view.width / 2, cy); ctx.scale(scale, scale); ctx.globalAlpha = Math.min(pop * 1.5, 1);
+    for (var l = 0; l < lines.length; l++) {
+      var x = -widths[l] / 2, y = (l - (lines.length - 1) / 2) * lh;
+      for (var m = 0; m < lines[l].length; m++) {
+        var wd = lines[l][m];
+        ctx.lineWidth = size * 0.2; ctx.strokeStyle = 'rgba(10,6,4,.92)'; ctx.strokeText(wd.text, x, y);
+        ctx.fillStyle = wd.hot ? '#e2b84f' : '#fff'; ctx.fillText(wd.text, x, y);
+        x += wd.w + space;
+      }
+    }
+    ctx.restore();
+  }
+
+  // subtitles: low on a wide frame; on a tall one (a 9:16 short) above the
+  // bottom fifth, which Shorts, TikTok and Reels cover with their own buttons
+  function caption(ctx, view, text, alpha) {
+    var tall = view.height > view.width;
+    var size = Math.round(Math.min(view.width, view.height) * (tall ? 0.052 : 0.042)), pad = size * 0.7, maxW = view.width * (tall ? 0.86 : 0.8);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '600 ' + size + 'px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var words = String(text).split(' '), lines = [], line = '';
+    for (var i = 0; i < words.length; i++) {
+      var next = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(next).width > maxW && line) { lines.push(line); line = words[i]; } else line = next;
+    }
+    if (line) lines.push(line);
+    var lh = size * 1.3, h = lines.length * lh + pad, y = tall ? view.height * 0.78 - h : view.height - h - view.height * 0.05, w = 0;
+    for (var j = 0; j < lines.length; j++) w = Math.max(w, ctx.measureText(lines[j]).width);
+    ctx.fillStyle = 'rgba(0,0,0,.6)';
+    ctx.fillRect((view.width - w) / 2 - pad, y, w + pad * 2, h);
+    ctx.fillStyle = '#fff';
+    for (var m = 0; m < lines.length; m++) ctx.fillText(lines[m], view.width / 2, y + pad / 2 + lh * (m + 0.5));
+    ctx.restore();
+  }
+
+  // -------------------------------------------------------------------------
+  // Kit.record: film the canvas and every Kit sound into a video file
+  // -------------------------------------------------------------------------
+  // record({ seconds, fps, width, height, name, type, onStart(), onDone(blob, filename) }) -> { stop(), recording }
+  // type picks the format ('video/webm'); by default MP4 where the browser can, else WebM.
+  // The video is always width x height, not the window's size: by default the
+  // game's shape with its long side 1280 (720x1280 for a 9:16 short, 720p).
+  // Ask for 1080p with width/height; slower machines may drop frames. Without onDone the file is saved: inside Polly's studio the
+  // page around the game offers the download.
+  Kit.record = function (o) {
+    o = o || {};
+    var view = Kit.view;
+    if (!view || !global.MediaRecorder) return null;
+    var big = 1280 / Math.max(view.width, view.height);
+    var w = Math.round(o.width || view.width * big), h = Math.round(o.height || view.height * big);
+    // draw the game at video resolution while recording
+    view.minPixels = Math.max(w / view.width, h / view.height);
+    if (view.fit) view.fit();
+    var copy = document.createElement('canvas');
+    copy.width = w; copy.height = h;
+    var cctx = copy.getContext('2d'), live = true;
+    (function blit() {
+      if (!live) return;
+      cctx.fillStyle = '#000'; cctx.fillRect(0, 0, w, h);
+      cctx.drawImage(view.canvas, 0, 0, w, h);
+      global.requestAnimationFrame(blit);
+    })();
+    var stream = copy.captureStream(o.fps || 30);
+    var audio = o.audio === false ? null : Kit.audio.stream();
+    if (audio) audio.getAudioTracks().forEach(function (t) { stream.addTrack(t); });
+    var types = (o.type ? [o.type] : []).concat(['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']);
+    var type = '';
+    for (var i = 0; i < types.length; i++) if (global.MediaRecorder.isTypeSupported(types[i])) { type = types[i]; break; }
+    var rec = new global.MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: o.bitrate || 8000000 } : {});
+    var chunks = [];
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = function () {
+      live = false;
+      view.minPixels = 0;
+      if (view.fit) view.fit();
+      var mime = rec.mimeType || type || 'video/webm';
+      var blob = new Blob(chunks, { type: mime });
+      var name = (o.name || document.title || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + (mime.indexOf('mp4') >= 0 ? '.mp4' : '.webm');
+      if (o.onDone) return o.onDone(blob, name);
+      if (global.parent && global.parent !== global) global.parent.postMessage({ pollyVideo: blob, name: name }, '*');
+      else {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+    };
+    var cancelled = false;
+    var handle = {
+      get recording() { return rec.state === 'recording'; },
+      stop: function () {
+        cancelled = true;
+        if (rec.state !== 'inactive') return rec.stop();
+        live = false; view.minPixels = 0; if (view.fit) view.fit();
+      }
+    };
+    // Start a beat after the streams exist: a recorder started in the same
+    // moment as a fresh canvas/audio stream sometimes captures nothing at all.
+    // onStart() is where to (re)start whatever should be filmed from frame one.
+    setTimeout(function () {
+      if (cancelled) return;
+      rec.start(250);
+      if (o.onStart) o.onStart();
+      if (o.seconds) setTimeout(handle.stop, o.seconds * 1000);
+    }, 300);
+    return handle;
+  };
+
+  // The page around a film (Polly's studio) can hand it a voiceover:
+  // { pollyVoice: [{ scene, data: ArrayBuffer }] }, or [] to remove it.
+  global.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || !d.pollyVoice || !Kit._film) return;
+    Kit._film.setVoice(d.pollyVoice, function (film) {
+      if (global.parent && global.parent !== global) global.parent.postMessage({ pollyVoiceReady: true, duration: film.duration }, '*');
+    });
+  });
+
+  // The page around a game (Polly's studio) can ask for a recording: a film
+  // restarts and is recorded start to finish; a game records `seconds`.
+  global.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || !d.pollyRecord) return;
+    var film = Kit._film;
+    // a film plays by itself while recording: clear its title screen
+    if (film) document.querySelectorAll('[data-kit-overlay]').forEach(function (el) { el.remove(); });
+    var rec = Kit.record({
+      // a film stops when it ends (the timer is only a safety net)
+      seconds: film ? film.duration * 3 + 5 : (d.seconds || 15),
+      onStart: function () { if (film) { film.onceEnded(function () { setTimeout(rec.stop, 400); }); film.restart(); } }
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Kit.ui: tiny DOM helpers for HUDs and overlays (title, pause, end screens)
   // -------------------------------------------------------------------------
   Kit.ui = {
@@ -405,7 +712,7 @@
     },
     // overlay({ title, body, button, onClick }) -> removes itself on click
     overlay: function (o) {
-      var wrap = Kit.ui.el('div', { 'data-kit-ui': '1', style: 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(6,4,12,.78);color:#fff;font:16px system-ui,sans-serif;text-align:center;padding:24px;z-index:10' });
+      var wrap = Kit.ui.el('div', { 'data-kit-ui': '1', 'data-kit-overlay': '1', style: 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(6,4,12,.78);color:#fff;font:16px system-ui,sans-serif;text-align:center;padding:24px;z-index:10' });
       wrap.appendChild(Kit.ui.el('h1', { style: 'margin:0;font-size:40px;letter-spacing:.04em' }, o.title || ''));
       if (o.body) wrap.appendChild(Kit.ui.el('p', { style: 'margin:0;max-width:360px;opacity:.85;line-height:1.45' }, o.body));
       if (o.button) {

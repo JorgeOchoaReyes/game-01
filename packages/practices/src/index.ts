@@ -45,7 +45,13 @@ These are the practices Ember was built with. Every Polly game follows them.
 - Feedback on everything that matters: particles (\`Kit.fx.burst\`), floating text (\`Kit.fx.text\`), screen shake (\`Kit.fx.shake\`), a sound.
 - Difficulty escalates over time (waves, speed-ups, nights) so the game has an arc.
 
-## 8. Multiplayer when asked
+## 8. Animations and explainer videos
+- A file can be a short video instead of a game: \`Kit.film(scenes)\`, each scene a \`caption\` and a \`draw(ctx, t, p)\`. Start from the video starter (3D, Three.js drawn into the canvas).
+- Draw everything on the canvas; Kit.film adds captions. Animate from \`t\`/\`p\` only. Scenes 4 to 9 s.
+- Captions: one short spoken sentence each (also the voiceover script); *star* key words.
+- Shorts first: \`CFG.format\` 'portrait' (9:16), 'landscape' or 'square'. Subject big, centred, close up.
+
+## 9. Multiplayer when asked
 - Local: \`Kit.input.setPlayers(2)\` gives player 1 WASD and player 2 the arrow keys (\`Kit.input.axis(1)\`).
 - Online: \`Kit.net.connect()\`, then \`Kit.net.on(type, fn(data, fromId))\` and \`Kit.net.send(type, data)\`.
   The relay only forwards messages. The host (\`Kit.net.isHost()\`, first to join) owns shared state and broadcasts it; others send intents.
@@ -70,6 +76,9 @@ Kit.fx.burst(x,y,n,color,speed,life,size) Kit.fx.text(x,y,str,color) Kit.fx.shak
 Kit.fx.applyShake(ctx) (call inside ctx.save()/restore() before drawing the world) Kit.fx.draw(ctx) (draws particles + floating text, 2D only)
 Kit.store.get(key, fallback) Kit.store.set(key, value)  // JSON, never throws
 Kit.ui.el(tag, attrs, html) Kit.ui.overlay({title, body(html), button, onClick}) -> element (removes itself on button click)
+Kit.film(scenes, {loop, fade, captions:'pop'|'bar', onEnd}) -> film {time, duration, playing, play(), pause(), seek(t), restart()}
+  // scenes: [{dur, caption, enter(film), draw(ctx, t, p)}]; t = s into scene, p = 0..1. Kit.loop(film.update, film.render)
+Kit.record({seconds, onStart(), onDone(blob, name)}) -> {stop()}  // canvas + Kit sounds to MP4/WebM
 Kit.net.connect({room?, game?}) Kit.net.on('open'|'join'|'leave'|'close'|'error'|<type>, fn(data, fromId))
 Kit.net.send(type, data, toId?) Kit.net.isHost() Kit.net.hasInvite() Kit.net.id Kit.net.peers Kit.net.room Kit.net.inviteLink() Kit.net.disconnect()
   // 'open' data: {id, peers, room}. Room comes from ?room= in the URL if present.
@@ -93,17 +102,17 @@ export const AGENT_WORKFLOW = `# Building games through the Polly API
 // Every public name on window.Kit, used to warn when a saved game calls one
 // that does not exist. packages/game-kit/test checks this against the runtime.
 export const KIT_API: readonly string[] = [
-  "Kit.audio", "Kit.audio.muted", "Kit.audio.noise", "Kit.audio.setMuted", "Kit.audio.sfx",
+  "Kit.audio", "Kit.audio.muted", "Kit.audio.noise", "Kit.audio.setMuted", "Kit.audio.sfx", "Kit.audio.stream",
   "Kit.audio.sfx.blip", "Kit.audio.sfx.boom", "Kit.audio.sfx.hit", "Kit.audio.sfx.jump", "Kit.audio.sfx.lose",
   "Kit.audio.sfx.pickup", "Kit.audio.sfx.shoot", "Kit.audio.sfx.win", "Kit.audio.toggle", "Kit.audio.tone",
   "Kit.canvas", "Kit.clamp", "Kit.dist", "Kit.dist2",
-  "Kit.fx", "Kit.fx.applyShake", "Kit.fx.burst", "Kit.fx.clear", "Kit.fx.draw", "Kit.fx.shake", "Kit.fx.text",
+  "Kit.film", "Kit.fx", "Kit.fx.applyShake", "Kit.fx.burst", "Kit.fx.clear", "Kit.fx.draw", "Kit.fx.shake", "Kit.fx.text",
   "Kit.hit",
   "Kit.input", "Kit.input.action", "Kit.input.axis", "Kit.input.key", "Kit.input.mouse", "Kit.input.pressed", "Kit.input.setPlayers", "Kit.input.stick", "Kit.input.tap",
   "Kit.lerp", "Kit.loop",
   "Kit.net", "Kit.net.connect", "Kit.net.connected", "Kit.net.disconnect", "Kit.net.hasInvite", "Kit.net.id", "Kit.net.inviteLink",
   "Kit.net.isHost", "Kit.net.on", "Kit.net.peers", "Kit.net.room", "Kit.net.send",
-  "Kit.pick", "Kit.rand", "Kit.randInt",
+  "Kit.pick", "Kit.rand", "Kit.randInt", "Kit.record",
   "Kit.store", "Kit.store.get", "Kit.store.set",
   "Kit.ui", "Kit.ui.el", "Kit.ui.overlay",
   "Kit.version", "Kit.view",

@@ -9,7 +9,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return { title: `${(findTemplate(id) ?? EMBER).title} · Polly` };
+  return { title: `${(findTemplate(id) ?? EMBER).title} · Polly Studio` };
 }
 
 // The starters and Ember, Polly's own games.

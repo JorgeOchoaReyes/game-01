@@ -3,7 +3,7 @@ import { currentUser } from "@/lib/server/session";
 import { findGame } from "@/lib/server/games";
 import { StudioWorkspace } from "@/components/StudioWorkspace";
 
-export const metadata = { title: "Studio · Polly" };
+export const metadata = { title: "Studio · Polly Studio" };
 export const dynamic = "force-dynamic";
 
 export default async function StudioGame({ params }: { params: Promise<{ id: string }> }) {

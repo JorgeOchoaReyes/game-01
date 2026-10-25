@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>How Did the Ancients Cook Food?</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; user-select: none; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: linear-gradient(transparent, rgba(0,0,0,.7)); color: #fff; font: bold 14px system-ui, sans-serif; z-index: 2; opacity: 0; transition: opacity .2s; }
+  body:hover #bar { opacity: 1; }
+  #bar button { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  #seek { flex: 1; height: 6px; background: rgba(255,255,255,.25); border-radius: 3px; cursor: pointer; position: relative; }
+  #seek i { position: absolute; left: 0; top: 0; bottom: 0; background: #d4af37; border-radius: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bar" data-kit-ui><button id="pp">⏸</button><div id="seek"><i></i></div><span id="clock">0:00</span><button id="mute">🔊</button></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * HOW DID THE ANCIENTS COOK FOOD? A Polly Studio short in 3D (Three.js + Kit.film).
+ * Six close-up shots, from the first spark to the first pot, then a recap.
+ * Three.js renders each shot off screen; Kit.film puts it in the frame and adds
+ * pop captions, crossfades, vignette and grain, so a recording has everything.
+ *
+ * CFG.format: 'portrait' (9:16 short), 'landscape' (16:9) or 'square'.
+ * Each shot: which props are showing, what they do at time t, and a camera move.
+ * Captions: *starred* words are highlighted.
+ */
+
+// ---------------------------------------------------------------------------
+// Tuning: format, colours and timing in one place
+// ---------------------------------------------------------------------------
+var CFG = {
+  format: 'portrait',
+  sky: 0x0b0f26, ground: 0x2a1c12, rock: 0x5d5650, wood: 0x6a4424, bark: 0x4a2c18,
+  flames: [0xe8401a, 0xff8a1e, 0xffc93a, 0xfff2b0],
+  meatRaw: 0xd0663f, meatCooked: 0x8a4419, bone: 0xeee2c8,
+  leaf: 0x3f8a3a, earth: 0x5a3c26, water: 0x24597f, clay: 0xb8643a, stew: 0x9a5a20,
+  crackleEvery: 0.07
+};
+
+var FORMATS = { portrait: [720, 1280], landscape: [1280, 720], square: [900, 900] };
+var size = FORMATS[CFG.format] || FORMATS.portrait;
+var view = Kit.canvas({ width: size[0], height: size[1] });
+var ctx = view.ctx;
+var W = size[0], H = size[1];
+var PORTRAIT = H > W;
+
+// a fixed pseudo-random number for index i, so every frame is repeatable
+function rnd(i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+function seg(p, a, b) { return Kit.clamp((p - a) / (b - a), 0, 1); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// ---------------------------------------------------------------------------
+// The 3D world: renderer, sky, ground, lights
+// ---------------------------------------------------------------------------
+var gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+gl.shadowMap.enabled = true; gl.shadowMap.type = THREE.PCFSoftShadowMap;
+gl.outputEncoding = THREE.sRGBEncoding; gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 0.95;
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(CFG.sky);
+scene.fog = new THREE.FogExp2(CFG.sky, 0.075);
+// a tall short sees more above and below; a wide frame sees more to the sides
+var camera = new THREE.PerspectiveCamera(PORTRAIT ? 60 : CFG.format === 'square' ? 48 : 38, W / H, 0.05, 200);
+
+scene.add(new THREE.HemisphereLight(0x4a4a80, 0x120808, 0.35));
+var moonLight = new THREE.DirectionalLight(0x8899ff, 0.35); moonLight.position.set(-6, 10, 4); scene.add(moonLight);
+
+// a soft round dot, for embers, sparks, glow and smoke
+var softTex = (function () {
+  var c = document.createElement('canvas'); c.width = c.height = 64;
+  var g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.4, 'rgba(255,255,255,.6)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+
+function mat(color, o) { return new THREE.MeshStandardMaterial(Object.assign({ color: color, roughness: 0.9, flatShading: true }, o || {})); }
+function mesh(geo, material, x, y, z) { var m = new THREE.Mesh(geo, material); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; return m; }
+
+// ground with gentle bumps, rocks and grass all around: something in every corner of the frame
+(function world() {
+  var g = new THREE.PlaneGeometry(80, 80, 70, 70);
+  var pos = g.attributes.position;
+  for (var i = 0; i < pos.count; i++) { var x = pos.getX(i), y = pos.getY(i), d = Math.sqrt(x * x + y * y); pos.setZ(i, d < 2.5 ? 0 : (rnd(i) - 0.5) * 0.25 + Math.sin(x * 0.4) * 0.15 * Math.min((d - 2.5) / 4, 1)); }
+  g.computeVertexNormals();
+  var ground = mesh(g, mat(CFG.ground)); ground.rotation.x = -Math.PI / 2; ground.castShadow = false; scene.add(ground);
+  for (var r = 0; r < 70; r++) {
+    var a = rnd(r) * Math.PI * 2, d = 1.4 + rnd(r + 9) * 9, s = 0.08 + rnd(r + 4) * 0.28;
+    var rock = mesh(new THREE.DodecahedronGeometry(s, 0), mat(CFG.rock), Math.cos(a) * d, s * 0.4, Math.sin(a) * d);
+    rock.rotation.set(rnd(r + 1) * 3, rnd(r + 2) * 3, 0); rock.scale.y = 0.6; scene.add(rock);
+  }
+  var grassMat = mat(0x4f6b2e);
+  for (var t = 0; t < 160; t++) {
+    var ga = rnd(t + 300) * Math.PI * 2, gd = 1.3 + rnd(t + 301) * 10;
+    var blade = mesh(new THREE.ConeGeometry(0.025, 0.22 + rnd(t) * 0.2, 4), grassMat, Math.cos(ga) * gd, 0.12, Math.sin(ga) * gd);
+    blade.rotation.z = (rnd(t + 5) - 0.5) * 0.6; blade.castShadow = false; scene.add(blade);
+  }
+  // stars on a dome, and a moon
+  var sg = new THREE.BufferGeometry(), sp = [];
+  for (var s2 = 0; s2 < 900; s2++) { var th = rnd(s2) * Math.PI * 2, ph = rnd(s2 + 7) * 1.2; sp.push(Math.cos(th) * Math.cos(ph) * 60, 6 + Math.sin(ph) * 60, Math.sin(th) * Math.cos(ph) * 60); }
+  sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xfff2e0, size: 0.35, map: softTex, transparent: true, depthWrite: false, fog: false })));
+  var moon = new THREE.Mesh(new THREE.SphereGeometry(2.4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff0d0, fog: false }));
+  moon.position.set(-14, 22, -48); scene.add(moon);
+  var halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xffe8c0, opacity: 0.35, transparent: true, depthWrite: false, fog: false }));
+  halo.position.copy(moon.position); halo.scale.set(16, 16, 1); scene.add(halo);
+})();
+
+// ---------------------------------------------------------------------------
+// Props: fire, smoke, sparks, hot stones
+// ---------------------------------------------------------------------------
+function makeFire(s) {
+  var f = { group: new THREE.Group(), flames: [], s: s };
+  for (var l = 0; l < 3; l++) {
+    var log = mesh(new THREE.CylinderGeometry(0.065 * s, 0.07 * s, 0.8 * s, 7), mat(CFG.wood), 0, 0.07 * s, 0);
+    log.rotation.z = Math.PI / 2; log.rotation.y = l * Math.PI / 3; f.group.add(log);
+  }
+  for (var k = 0; k < 10; k++) {
+    var a = k / 10 * Math.PI * 2, st = mesh(new THREE.DodecahedronGeometry(0.1 * s, 0), mat(CFG.rock), Math.cos(a) * 0.5 * s, 0.05 * s, Math.sin(a) * 0.5 * s);
+    st.scale.y = 0.6; f.group.add(st);
+  }
+  var drop = [[0, 0], [0.08, 0.03], [0.1, 0.1], [0.085, 0.22], [0.05, 0.36], [0.015, 0.5], [0, 0.56]].map(function (v) { return new THREE.Vector2(v[0] * s, v[1] * s); });
+  [5, 4, 3, 2].forEach(function (n, layer) {
+    for (var i = 0; i < n; i++) {
+      var geo = new THREE.LatheGeometry(drop, 12);
+      var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: CFG.flames[layer], transparent: true, opacity: [0.32, 0.38, 0.45, 0.55][layer], blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      m.userData = { layer: layer, i: i, n: n };
+      f.group.add(m); f.flames.push(m);
+    }
+  });
+  f.light = new THREE.PointLight(0xff8a3a, 3, 7 * s, 1.6); f.light.position.y = 0.4 * s; f.light.castShadow = true;
+  f.light.shadow.mapSize.set(512, 512); f.group.add(f.light);
+  f.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xff7a2a, opacity: 0.45, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }));
+  f.glow.position.y = 0.3 * s; f.group.add(f.glow);
+  var eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(40 * 3), 3));
+  f.embers = new THREE.Points(eg, new THREE.PointsMaterial({ color: 0xff9a3a, size: 0.045 * s, map: softTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  f.group.add(f.embers);
+  scene.add(f.group);
+  return f;
+}
+// k = 0..1: how well the fire is burning
+function updateFire(f, t, k) {
+  var s = f.s;
+  f.flames.forEach(function (m) {
+    var d = m.userData, ph = t * (7 + d.i * 1.3 + d.layer) + d.i * 2.1 + d.layer * 1.7;
+    var spread = (1 - d.layer * 0.22) * 0.16 * s, a = d.i / d.n * Math.PI * 2 + d.layer;
+    m.position.set(Math.cos(a) * spread, 0.05 * s, Math.sin(a) * spread);
+    var w = (1.5 - d.layer * 0.25) * k, h = (1.35 - d.layer * 0.24) * k * (0.75 + 0.25 * Math.sin(ph));
+    m.scale.set(Math.max(w, 0.001), Math.max(h, 0.001), Math.max(w, 0.001));
+    m.rotation.set(Math.sin(ph * 0.7) * 0.18, 0, Math.cos(ph * 0.8) * 0.18);
+    m.visible = k > 0.01;
+  });
+  f.light.intensity = k * (2.6 + 0.6 * Math.sin(t * 13) + 0.4 * Math.sin(t * 7.3));
+  f.glow.scale.set(1.8 * s * k, 1.8 * s * k, 1); f.glow.visible = k > 0.01;
+  var p = f.embers.geometry.attributes.position;
+  for (var e = 0; e < 40; e++) {
+    var life = (t * (0.3 + rnd(e) * 0.3) + rnd(e + 40)) % 1;
+    p.setXYZ(e, (rnd(e + 9) - 0.5) * 0.4 * s + Math.sin(life * 8 + e) * 0.08 * s, 0.2 * s + life * 1.6 * s, (rnd(e + 19) - 0.5) * 0.4 * s);
+  }
+  p.needsUpdate = true; f.embers.visible = k > 0.2;
+}
+
+function makeSmoke(n, color) {
+  var sm = { sprites: [] };
+  for (var i = 0; i < n; i++) {
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: color || 0xcfc8d8, transparent: true, depthWrite: false, opacity: 0 }));
+    scene.add(sp); sm.sprites.push(sp);
+  }
+  return sm;
+}
+function updateSmoke(sm, x, y, z, t, amount, s) {
+  s = s || 1;
+  sm.sprites.forEach(function (sp, i) {
+    var life = (t * 0.2 + rnd(i + 70)) % 1;
+    sp.visible = amount > 0;
+    sp.position.set(x + Math.sin(life * 5 + i) * 0.15 * s + (rnd(i) - 0.5) * 0.25 * s, y + life * 2.2 * s, z + (rnd(i + 3) - 0.5) * 0.25 * s);
+    var sc = (0.3 + life * 1.1) * s; sp.scale.set(sc, sc, 1);
+    sp.material.opacity = 0.32 * (1 - life) * Math.min(life * 6, 1) * amount;
+  });
+}
+function hotMat() { return mat(0x5d5650, { emissive: 0xff3a00, emissiveIntensity: 0, roughness: 0.7 }); }
+// h = 0..1: cold grey stone to glowing red-hot
+function setHeat(m, h) { m.material.emissiveIntensity = h * 0.9; m.material.color.setRGB(lerp(0.36, 0.35, h), lerp(0.34, 0.08, h), lerp(0.31, 0.02, h)); }
+
+// ---------------------------------------------------------------------------
+// The sets, one per shot. All built once; each shot shows its own.
+// ---------------------------------------------------------------------------
+var sets = {};
+function set(name) { var g = new THREE.Group(); g.visible = false; scene.add(g); sets[name] = g; return g; }
+
+// shot 1 and 7: the campfire
+var campFire = makeFire(1.2), campSmoke = makeSmoke(18);
+
+// shot 2: flint over a tinder nest
+var flintSet = set('flint');
+var tinderMat = mat(0xd9b46a);
+for (var tn = 0; tn < 60; tn++) {
+  var straw = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.34, 3), tinderMat, (rnd(tn) - 0.5) * 0.25, 0.05 + rnd(tn + 1) * 0.06, (rnd(tn + 2) - 0.5) * 0.25);
+  straw.rotation.set(Math.PI / 2 + (rnd(tn + 3) - 0.5), rnd(tn + 4) * Math.PI, (rnd(tn + 5) - 0.5) * 0.8); flintSet.add(straw);
+}
+var flintA = mesh(new THREE.DodecahedronGeometry(0.11, 1), mat(0x4a4a50, { roughness: 0.4 })); flintA.scale.set(1, 0.7, 0.85); flintSet.add(flintA);
+var flintB = mesh(new THREE.DodecahedronGeometry(0.12, 1), mat(0x8a7a60, { roughness: 0.6 })); flintB.scale.set(1.1, 0.75, 0.9); flintSet.add(flintB);
+var sparkGeo = new THREE.BufferGeometry(); sparkGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(36 * 3), 3));
+var sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ color: 0xffc860, size: 0.04, map: softTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+flintSet.add(sparks);
+var tinderFire = makeFire(0.6); tinderFire.group.visible = false;
+var sparkLight = new THREE.PointLight(0xffc060, 0, 3, 2); sparkLight.position.set(0, 0.35, 0); flintSet.add(sparkLight);
+var flintKey = new THREE.PointLight(0xffa860, 1.4, 4, 2); flintKey.position.set(0.9, 0.8, 0.9); flintSet.add(flintKey);
+
+// shot 3: a haunch on a spit
+var roastSet = set('roast'), roastFire = makeFire(1.1);
+var stickMat = mat(CFG.wood);
+[-0.85, 0.85].forEach(function (x) {
+  var post = mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.1, 6), stickMat, x, 0.55, 0); roastSet.add(post);
+  [-1, 1].forEach(function (side) { var fork = mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.25, 5), stickMat, x + side * 0.05, 1.15, 0); fork.rotation.z = side * -0.5; roastSet.add(fork); });
+});
+var spit = mesh(new THREE.CylinderGeometry(0.018, 0.018, 2.0, 6), mat(0x8a6038), 0, 1.08, 0); spit.rotation.z = Math.PI / 2; roastSet.add(spit);
+var haunch = new THREE.Group(); haunch.position.set(0, 1.08, 0); roastSet.add(haunch);
+var meatMat = mat(CFG.meatRaw, { roughness: 0.35, flatShading: false });
+var meat = mesh(new THREE.SphereGeometry(0.3, 20, 14), meatMat); meat.scale.set(1.35, 0.85, 0.85); haunch.add(meat);
+var boneMat = mat(CFG.bone, { roughness: 0.6, flatShading: false });
+var bone = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.45, 10), boneMat, 0.52, 0, 0); bone.rotation.z = Math.PI / 2; haunch.add(bone);
+haunch.add(mesh(new THREE.SphereGeometry(0.06, 10, 8), boneMat, 0.75, 0.035, 0)); haunch.add(mesh(new THREE.SphereGeometry(0.06, 10, 8), boneMat, 0.75, -0.035, 0));
+var drips = [];
+for (var dp = 0; dp < 6; dp++) { var drip = mesh(new THREE.SphereGeometry(0.018, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd080 })); roastSet.add(drip); drips.push(drip); }
+var roastSmoke = makeSmoke(14, 0x9a8a98);
+
+// shot 4: the earth oven
+var ovenSet = set('oven');
+var pitFloor = mesh(new THREE.CircleGeometry(0.8, 28), mat(0x1c120a), 0, 0.006, 0); pitFloor.rotation.x = -Math.PI / 2; ovenSet.add(pitFloor);
+var pitRim = mesh(new THREE.TorusGeometry(0.86, 0.14, 8, 32), mat(0x4a3020), 0, 0.03, 0); pitRim.rotation.x = -Math.PI / 2; pitRim.scale.z = 0.7; ovenSet.add(pitRim);
+var ovenStones = [];
+for (var os = 0; os < 16; os++) { var oa = rnd(os + 60) * Math.PI * 2, od = Math.sqrt(rnd(os + 61)) * 0.62; var ost = mesh(new THREE.DodecahedronGeometry(0.1 + rnd(os) * 0.05, 0), hotMat(), Math.cos(oa) * od, 0.07, Math.sin(oa) * od); ovenSet.add(ost); ovenStones.push(ost); }
+var ovenGlow = new THREE.PointLight(0xff6a20, 0, 3, 2); ovenGlow.position.set(0, 0.35, 0); ovenSet.add(ovenGlow);
+var parcels = [];
+for (var pc = 0; pc < 3; pc++) { var parcel = mesh(new THREE.SphereGeometry(0.2, 12, 8), mat(CFG.leaf)); parcel.scale.set(1.3, 0.55, 0.9); ovenSet.add(parcel); parcels.push(parcel); }
+var mound = mesh(new THREE.SphereGeometry(1.05, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(CFG.earth)); ovenSet.add(mound);
+var ovenSteam = makeSmoke(16, 0xe8e4ee);
+
+// shot 5: stone boiling in a wooden bowl
+var boilSet = set('boil'), boilFire = makeFire(0.8);
+var bowl = mesh(new THREE.LatheGeometry([[0, 0], [0.45, 0.02], [0.62, 0.15], [0.7, 0.38], [0.66, 0.4], [0.58, 0.18], [0.44, 0.07], [0, 0.06]].map(function (v) { return new THREE.Vector2(v[0], v[1]); }), 28), mat(0x8a5a32, { flatShading: false, roughness: 0.75 }));
+boilSet.add(bowl);
+var water = mesh(new THREE.CircleGeometry(0.62, 32), new THREE.MeshStandardMaterial({ color: CFG.water, roughness: 0.03, metalness: 0.35, emissive: 0x061a2c, emissiveIntensity: 0.8 }), 0, 0.33, 0);
+water.rotation.x = -Math.PI / 2; boilSet.add(water);
+var bubbles = [];
+for (var bb = 0; bb < 50; bb++) { var bub = mesh(new THREE.SphereGeometry(0.01 + rnd(bb) * 0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xeaf8ff, transparent: true, opacity: 0.55 })); bub.scale.y = 0.6; bub.castShadow = false; boilSet.add(bub); bubbles.push(bub); }
+var boilStones = [0, 1, 2].map(function (i) { var s3 = mesh(new THREE.DodecahedronGeometry(0.09, 0), hotMat()); boilSet.add(s3); return s3; });
+var splashGeo = new THREE.BufferGeometry(); splashGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(30 * 3), 3));
+var splash = new THREE.Points(splashGeo, new THREE.PointsMaterial({ color: 0xcfeaff, size: 0.05, map: softTex, transparent: true, depthWrite: false }));
+boilSet.add(splash);
+var boilSteam = makeSmoke(18, 0xf0f0f8);
+
+// shot 6: the clay pot
+var potSet = set('pot'), potFire = makeFire(1.0);
+var pot = mesh(new THREE.LatheGeometry([[0, 0], [0.3, 0.02], [0.5, 0.18], [0.56, 0.4], [0.5, 0.62], [0.42, 0.72], [0.46, 0.8], [0.43, 0.82], [0.38, 0.74]].map(function (v) { return new THREE.Vector2(v[0], v[1]); }), 32), mat(CFG.clay, { flatShading: false, roughness: 0.85 }), 0, 0.28, 0);
+potSet.add(pot);
+// incised zigzag band, as small dark ridges around the belly
+[0.6, 0.76].forEach(function (y, i) { var band = mesh(new THREE.TorusGeometry(i ? 0.545 : 0.56, 0.012, 6, 48), mat(0x6a3014), 0, y, 0); band.rotation.x = Math.PI / 2; potSet.add(band); });
+for (var zz = 0; zz < 28; zz++) { var za = zz / 28 * Math.PI * 2, nick = mesh(new THREE.BoxGeometry(0.012, 0.11, 0.012), mat(0x6a3014), Math.cos(za) * 0.552, 0.68, Math.sin(za) * 0.552); nick.rotation.y = -za; nick.rotation.x = zz % 2 ? 0.55 : -0.55; potSet.add(nick); }
+var stew = mesh(new THREE.CircleGeometry(0.41, 28), mat(CFG.stew, { roughness: 0.3, emissive: 0x3a1a00, emissiveIntensity: 0.4 }), 0, 1.0, 0); stew.rotation.x = -Math.PI / 2; potSet.add(stew);
+var veg = [];
+[0xf0b62a, 0xd8502a, 0x6aa040, 0xefe0b0, 0xf0b62a, 0x6aa040, 0xd8502a].forEach(function (c, i) { var v = mesh(new THREE.SphereGeometry(0.045, 8, 6), mat(c)); potSet.add(v); veg.push(v); });
+var spoon = new THREE.Group(); potSet.add(spoon);
+var handle = mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.9, 6), mat(0x9a6a38), 0, 0.45, 0); spoon.add(handle);
+spoon.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), mat(0x9a6a38), 0, 0, 0));
+var potSteam = makeSmoke(18, 0xf2eef4);
+
+var allFires = [campFire, tinderFire, roastFire, boilFire, potFire];
+function hideAll() {
+  Object.keys(sets).forEach(function (k) { sets[k].visible = false; });
+  allFires.forEach(function (f) { f.group.visible = false; f.light.intensity = 0; });
+  [campSmoke, roastSmoke, ovenSteam, boilSteam, potSteam].forEach(function (s) { s.sprites.forEach(function (sp) { sp.visible = false; }); });
+}
+
+// ---------------------------------------------------------------------------
+// Rendering a shot into the 2D frame
+// ---------------------------------------------------------------------------
+var tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+// move from camera a to b ({ pos, look }) over the shot, with a slight handheld drift
+function shoot(a, b, p, t) {
+  var e = ease(p);
+  tmpA.set(lerp(a.pos[0], b.pos[0], e) + Math.sin(t * 0.7) * 0.02, lerp(a.pos[1], b.pos[1], e) + Math.cos(t * 0.6) * 0.015, lerp(a.pos[2], b.pos[2], e));
+  tmpB.set(lerp(a.look[0], b.look[0], e), lerp(a.look[1], b.look[1], e), lerp(a.look[2], b.look[2], e));
+  camera.position.copy(tmpA); camera.lookAt(tmpB);
+  // render at the frame's real pixel size so video stays sharp
+  var q = view.canvas.width / W, pw = Math.round(W * q), ph = Math.round(H * q);
+  var cur = gl.getSize(new THREE.Vector2());
+  if (cur.x !== pw || cur.y !== ph) gl.setSize(pw, ph, false);
+  // a short keeps its subject a little above centre, clear of the captions
+  if (PORTRAIT) camera.setViewOffset(pw, ph, 0, ph * 0.07, pw, ph); else camera.clearViewOffset();
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  gl.render(scene, camera);
+  ctx.drawImage(gl.domElement, 0, 0, W, H);
+}
+
+function label(text, y, alpha) {
+  if (alpha <= 0) return;
+  var u = Math.min(W, H) / 720;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(W / 2, y); var s = (0.9 + 0.1 * ease(alpha)) * u; ctx.scale(s, s);
+  ctx.font = '800 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  var w = ctx.measureText(text).width + 44;
+  ctx.fillStyle = '#d4af37'; ctx.beginPath(); ctx.roundRect(-w / 2, -27, w, 54, 27); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillText(text, 0, 1); ctx.restore();
+}
+function pad(chord, vol) { chord.forEach(function (f, i) { Kit.audio.tone({ freq: f, dur: 3.2, type: 'triangle', vol: vol || 0.05, delay: i * 0.06 }); }); }
+function whoosh() { Kit.audio.noise({ dur: 0.45, cutoff: 900, vol: 0.12 }); }
+
+// ---------------------------------------------------------------------------
+// The shots
+// ---------------------------------------------------------------------------
+var scenes = [
+  { // 1. hook: a campfire, close and low
+    dur: 4.5, caption: 'How did people cook *before kitchens?*',
+    enter: function () { pad([196, 247, 294]); },
+    draw: function (ctx, t, p) {
+      hideAll(); campFire.group.visible = true; updateFire(campFire, t, 1); updateSmoke(campSmoke, 0, 1.0, 0, t, 0.7, 1);
+      shoot({ pos: [0.2, 0.7, 3.4], look: [0, 0.55, 0] }, { pos: [-0.3, 0.6, 2.3], look: [0, 0.6, 0] }, p, t);
+    }
+  },
+  { // 2. the first fire
+    dur: 7, caption: 'Over a *million years* ago, humans learned to *control fire.*',
+    enter: function () { pad([175, 220, 262]); whoosh(); },
+    draw: function (ctx, t, p) {
+      hideAll(); flintSet.visible = true;
+      var lit = seg(p, 0.6, 0.85), cycle = (t % 1.05) / 1.05;
+      var swing = cycle < 0.42 ? ease(cycle / 0.42) : 1 - ease((cycle - 0.42) / 0.58), away = ease(seg(p, 0.62, 0.8));
+      flintA.position.set(-0.32 + swing * 0.22 - away * 0.6, 0.42 - swing * 0.08 + away * 0.3, 0.05); flintA.rotation.set(t * 0.3, 0.4, swing * 0.6);
+      flintB.position.set(0.14 + away * 0.6, 0.34 + away * 0.3, 0); flintB.rotation.set(0.3, t * 0.2, -0.3);
+      // sparks fly from each strike until the grass catches
+      var q = cycle > 0.42 ? (cycle - 0.42) / 0.35 : -1, sp = sparks.geometry.attributes.position, seed = Math.floor(t / 1.05);
+      for (var i = 0; i < 36; i++) {
+        var a = rnd(seed * 50 + i) * Math.PI * 2, up = 0.4 + rnd(seed * 50 + i + 9) * 1.2, v = 0.6 + rnd(i + 3) * 0.9;
+        sp.setXYZ(i, -0.1 + Math.cos(a) * v * q, 0.4 + up * q - 2.2 * q * q, Math.sin(a) * v * q * 0.6);
+      }
+      sp.needsUpdate = true; sparks.visible = q >= 0 && q < 1 && lit === 0;
+      sparkLight.intensity = sparks.visible ? (1 - q) * 3 : 0;
+      tinderFire.group.visible = lit > 0; updateFire(tinderFire, t, lit);
+      updateSmoke(campSmoke, 0, 0.3, 0, t, lit > 0 && lit < 1 ? 1 : lit * 0.5, 0.6);
+      shoot({ pos: [0.1, 0.75, 1.5], look: [0, 0.32, 0] }, { pos: [-0.25, 0.6, 1.15], look: [0, 0.3, 0] }, p, t);
+    }
+  },
+  { // 3. roasting on a spit
+    dur: 6.5, caption: 'The first recipe: meat on a stick, *roasted* over open flames.',
+    enter: function () { pad([196, 247, 330]); whoosh(); },
+    draw: function (ctx, t, p) {
+      hideAll(); roastSet.visible = true; roastFire.group.visible = true; updateFire(roastFire, t, 1);
+      haunch.rotation.x = t * 1.3;
+      meatMat.color.setHex(CFG.meatRaw).lerp(new THREE.Color(CFG.meatCooked), ease(p) * 0.9);
+      drips.forEach(function (d, i) { var dl = (t * 0.9 + rnd(i)) % 1; d.position.set(-0.3 + i * 0.12, 0.85 - dl * 0.7, (rnd(i + 2) - 0.5) * 0.1); d.visible = dl < 0.95; });
+      updateSmoke(roastSmoke, 0, 1.25, 0, t, 0.7, 0.8);
+      shoot({ pos: [0.9, 1.35, 2.3], look: [0.05, 0.95, 0] }, { pos: [-0.5, 1.2, 1.75], look: [0.1, 1.0, 0] }, p, t);
+    }
+  },
+  { // 4. the earth oven
+    dur: 7.5, caption: 'Earth ovens: hot stones, food wrapped in *leaves*, buried for *hours.*',
+    enter: function () { pad([175, 220, 294]); whoosh(); },
+    draw: function (ctx, t, p) {
+      hideAll(); ovenSet.visible = true;
+      var heat = 1 - seg(p, 0.85, 1) * 0.4, drop = ease(seg(p, 0.05, 0.32)), bury = ease(seg(p, 0.38, 0.66));
+      ovenStones.forEach(function (s) { setHeat(s, heat); });
+      ovenGlow.intensity = 3 * heat * (1 - bury * 0.85);
+      parcels.forEach(function (pc, i) { pc.position.set(-0.32 + i * 0.32, lerp(0.95, 0.2, drop) + i * 0.02, (i - 1) * 0.12); pc.rotation.y = i * 0.7; });
+      mound.visible = bury > 0.001; mound.scale.set(lerp(0.5, 1, bury), Math.max(bury * 0.5, 0.001), lerp(0.5, 1, bury)); mound.position.y = 0;
+      updateSmoke(ovenSteam, 0, 0.45, 0, t, seg(p, 0.66, 0.8), 0.8);
+      shoot({ pos: [0, 1.7, 2.2], look: [0, 0.15, 0] }, { pos: [0.45, 1.25, 1.8], look: [0, 0.2, 0] }, p, t);
+      label('⏳ hours later', H * (PORTRAIT ? 0.2 : 0.16), seg(p, 0.7, 0.8));
+    }
+  },
+  { // 5. stone boiling
+    dur: 7, caption: 'No pots? Drop *red-hot stones* into water until it *boils.*',
+    enter: function () { pad([196, 233, 294]); whoosh(); },
+    draw: function (ctx, t, p) {
+      hideAll(); boilSet.visible = true; boilFire.group.visible = true; boilFire.group.position.set(1.5, 0, -0.9); updateFire(boilFire, t, 1);
+      var drops = [0.18, 0.42, 0.66], boil = 0;
+      drops.forEach(function (d) { boil += seg(p, d, d + 0.15); });
+      boil /= drops.length;
+      boilStones.forEach(function (s, i) {
+        var d = drops[i], q = seg(p, d - 0.16, d), sunk = seg(p, d, d + 0.25);
+        if (q < 1) s.position.set(lerp(1.5, -0.2 + i * 0.2, ease(q)), lerp(0.25, 0.33, q) + Math.sin(q * Math.PI) * 0.7, lerp(-0.9, 0, ease(q)));
+        else s.position.set(-0.2 + i * 0.2, 0.25 - sunk * 0.1, (i - 1) * 0.1);
+        // once it's in, the stone is under the water
+        s.visible = q > 0 && q < 1;
+        setHeat(s, q < 1 ? 1 : 1 - sunk * 0.6);
+      });
+      var sp = splash.geometry.attributes.position, any = false;
+      for (var j = 0; j < 30; j++) {
+        var which = j % 3, sq = seg(p, drops[which], drops[which] + 0.08);
+        if (sq > 0 && sq < 1) any = true;
+        var a = rnd(j) * Math.PI * 2, v = 0.3 + rnd(j + 5) * 0.4;
+        sp.setXYZ(j, -0.2 + which * 0.2 + Math.cos(a) * v * sq, 0.34 + (0.6 + rnd(j + 2)) * sq - 1.6 * sq * sq, Math.sin(a) * v * sq);
+      }
+      sp.needsUpdate = true; splash.visible = any;
+      bubbles.forEach(function (b, i) { var bl = (t * (1.2 + boil * 2) + rnd(i)) % 1, show = rnd(i + 11) < boil; b.visible = show; b.position.set((rnd(i + 3) - 0.5) * 1.0 * (1 - bl * 0.2), 0.335 + bl * 0.03, (rnd(i + 6) - 0.5) * 1.0); b.scale.setScalar(1 - bl * 0.5); });
+      water.position.y = 0.33 + Math.sin(t * 9) * 0.004 * boil;
+      updateSmoke(boilSteam, 0, 0.45, 0, t, boil * 1.3, 0.9);
+      shoot({ pos: [0.5, 1.25, 1.75], look: [0, 0.3, 0] }, { pos: [-0.2, 1.05, 1.35], look: [0, 0.3, 0] }, p, t);
+    }
+  },
+  { // 6. clay pots
+    dur: 6.5, caption: 'Then, about *20,000 years ago:* clay pots. Hello, *soup.*',
+    enter: function () { pad([220, 277, 330], 0.06); whoosh(); },
+    draw: function (ctx, t, p) {
+      hideAll(); potSet.visible = true; potFire.group.visible = true; potFire.group.position.set(0, -0.05, 0); updateFire(potFire, t, 0.85);
+      veg.forEach(function (v, i) { var a = t * 0.6 + i / veg.length * Math.PI * 2, r = 0.12 + (i % 3) * 0.09; v.position.set(Math.cos(a) * r, 1.01 + Math.sin(t * 3 + i) * 0.012, Math.sin(a) * r); });
+      var st = t * 1.6; spoon.position.set(Math.cos(st) * 0.18, 0.98, Math.sin(st) * 0.18); spoon.rotation.set(Math.sin(st) * 0.4, 0, -0.55 + Math.cos(st) * 0.2);
+      updateSmoke(potSteam, 0, 1.1, 0, t, 1.1, 0.9);
+      shoot({ pos: [0.9, 1.75, 2.3], look: [0, 0.75, 0] }, { pos: [-0.2, 1.5, 1.85], look: [0, 0.8, 0] }, p, t);
+      label('≈ 20,000 years ago', H * (PORTRAIT ? 0.17 : 0.14), seg(p, 0.08, 0.2));
+    }
+  },
+  { // 7. the journey, over the dimmed fire
+    dur: 5, caption: 'Every meal you cook today started *here.*',
+    enter: function () { Kit.audio.sfx.win(); },
+    draw: function (ctx, t, p) {
+      hideAll(); campFire.group.visible = true; updateFire(campFire, t, 0.8);
+      shoot({ pos: [0, 2.4, 4.2], look: [0, 0.4, 0] }, { pos: [0, 2.6, 4.6], look: [0, 0.4, 0] }, p, t);
+      ctx.fillStyle = 'rgba(8,6,12,.62)'; ctx.fillRect(0, 0, W, H);
+      var u = Math.min(W, H) / 720, steps = [['🔥', 'Fire'], ['🍖', 'Roasting'], ['🪨', 'Earth ovens'], ['💧', 'Stone boiling'], ['🍲', 'Clay pots']];
+      steps.forEach(function (s, i) {
+        var a = ease(seg(p, 0.04 + i * 0.09, 0.16 + i * 0.09));
+        var x = PORTRAIT ? W * 0.3 : W * (0.14 + i * 0.18), y = PORTRAIT ? H * (0.16 + i * 0.1) : H * 0.42;
+        if (i < steps.length - 1) {
+          var nx = PORTRAIT ? x : W * (0.14 + (i + 1) * 0.18), ny = PORTRAIT ? H * (0.16 + (i + 1) * 0.1) : y, g2 = ease(seg(p, 0.1 + i * 0.09, 0.22 + i * 0.09));
+          ctx.strokeStyle = 'rgba(212,175,55,.8)'; ctx.lineWidth = 6 * u; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lerp(x, nx, g2), lerp(y, ny, g2)); ctx.stroke();
+        }
+        ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale((0.5 + 0.5 * a) * u, (0.5 + 0.5 * a) * u);
+        ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.arc(0, 0, 54, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.font = '56px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(s[0], 0, 4);
+        ctx.restore();
+        ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(32 * u) + 'px system-ui'; ctx.textBaseline = 'middle';
+        if (PORTRAIT) { ctx.textAlign = 'left'; ctx.fillText(s[1], x + 80 * u, y); } else { ctx.textAlign = 'center'; ctx.fillText(s[1], x, y + 90 * u); }
+        ctx.restore();
+      });
+    }
+  }
+];
+
+// ---------------------------------------------------------------------------
+// Playback, sound, controls
+// ---------------------------------------------------------------------------
+var film = Kit.film(scenes, { onEnd: function () { pp.textContent = '↻'; } });
+var crackleT = 0, FIRE_SCENES = [0, 1, 2, 4, 5, 6];
+
+function update(dt) {
+  var before = film.time;
+  film.update(dt);
+  if (!film.playing) return;
+  crackleT -= dt;
+  if (FIRE_SCENES.indexOf(film.index) >= 0 && crackleT <= 0) {
+    crackleT = CFG.crackleEvery * Kit.rand(0.5, 2.5);
+    Kit.audio.noise({ dur: 0.03, cutoff: Kit.rand(1500, 4500), vol: Kit.rand(0.04, 0.12) });
+  }
+  // sound on the beats: each flint strike, the grass catching, each stone into the water
+  var start = 0;
+  for (var i = 0; i < film.index; i++) start += scenes[i].dur;
+  var t0 = before - start, t1 = film.time - start;
+  // scenes may have grown to fit a voiceover, so beats follow each scene's own length
+  var d1 = scenes[1].dur, d4 = scenes[4].dur;
+  if (film.index === 1) for (var k = 0.44; k < d1 * 0.6; k += 1.05) if (t0 < k && t1 >= k) { Kit.audio.tone({ freq: 2200, to: 1200, dur: 0.05, type: 'square', vol: 0.12 }); Kit.audio.noise({ dur: 0.08, cutoff: 5000, vol: 0.15 }); }
+  if (film.index === 1 && t0 < d1 * 0.6 && t1 >= d1 * 0.6) Kit.audio.noise({ dur: 0.9, cutoff: 1400, vol: 0.3 });
+  if (film.index === 4) [0.18, 0.42, 0.66].forEach(function (d) { if (t0 < d * d4 && t1 >= d * d4) { Kit.audio.noise({ dur: 0.7, cutoff: 1600, vol: 0.3 }); Kit.audio.tone({ freq: 140, to: 50, dur: 0.25, type: 'sine', vol: 0.25 }); } });
+}
+
+function render() {
+  film.render();
+  document.querySelector('#seek i').style.width = (film.time / film.duration * 100) + '%';
+  var s = Math.floor(film.time), d = Math.round(film.duration);
+  document.getElementById('clock').textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) + ' / ' + Math.floor(d / 60) + ':' + ('0' + (d % 60)).slice(-2);
+}
+
+var pp = document.getElementById('pp');
+pp.onclick = function () { pp.textContent = film.toggle() ? '⏸' : '▶'; };
+document.getElementById('seek').onclick = function (e) { var r = this.getBoundingClientRect(); film.seek((e.clientX - r.left) / r.width * film.duration); };
+var muteBtn = document.getElementById('mute');
+muteBtn.textContent = Kit.audio.muted ? '🔇' : '🔊';
+muteBtn.onclick = function () { muteBtn.textContent = Kit.audio.toggle() ? '🔇' : '🔊'; };
+addEventListener('keydown', function (e) { if (e.code === 'Space') pp.onclick(); });
+addEventListener('pointerdown', function (e) { if (!e.target.closest('[data-kit-ui]')) pp.onclick(); });
+
+Kit.ui.overlay({
+  title: 'How did the ancients cook food?',
+  body: 'A 45-second 3D short, from the first spark to the first pot.',
+  button: '▶ Watch',
+  onClick: function () { film.play(); }
+});
+
+Kit.loop(update, render);
+</script>
+</body>
+</html>

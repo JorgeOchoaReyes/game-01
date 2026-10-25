@@ -10,6 +10,7 @@ import {
   type UserCredential,
 } from "firebase/auth";
 import { authErrorMessage, firebaseAuth } from "@/lib/firebase-client";
+import { PollyDog } from "./PollyDog";
 
 // Signs in with Firebase in the browser, then trades the ID token for Polly's
 // session cookie. Someone who was a guest before keeps the games they made.
@@ -55,13 +56,14 @@ export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signu
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
+        <PollyDog size={84} className="auth-dog" mood={signup ? "happy" : "wink"} />
         <h1>{signup ? (guest ? "Keep your games" : "Make an account") : "Welcome back"}</h1>
         <p className="muted">
           {signup
             ? guest
               ? "You're building as a guest. Make an account and your games come with you."
-              : "Make games with Frankie, keep your streak going, and share what you build."
-            : "Log in to keep building and keep your streak."}
+              : "Join Polly Studio: make games and videos with Frankie, keep your streak going, share what you build."
+            : "Polly missed you. Log in to keep building and keep your streak."}
         </p>
         <button className="btn" type="button" disabled={busy} onClick={() => void finish(() => signInWithPopup(firebaseAuth(), new GoogleAuthProvider()))}>
           Continue with Google

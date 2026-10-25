@@ -1,7 +1,7 @@
 import { AGENT_WORKFLOW, GAME_KIT_REFERENCE, GAME_PRACTICES } from "@polly/practices";
 import { Markdown } from "@/components/Markdown";
 
-export const metadata = { title: "How games are built · Polly" };
+export const metadata = { title: "How it's built · Polly Studio" };
 
 export default function Practices() {
   return (

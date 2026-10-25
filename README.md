@@ -1,12 +1,18 @@
-# 🦜 Polly
+# 🐶 Polly Studio
 
-Polly is a tiny game engine and a home for browser games. People sign in and build games
-in the studio with **Frankie**, the AI chat that plugs in as a React SDK
-(`@frankieai/react`, from the Frankie repo). They play each game live while it changes,
-and can share it publicly, play online with friends, or download it as a zip that runs
-anywhere.
+Polly Studio (named after Polly, a black-and-gold chihuahua) is where people make
+**games** and **short videos** by describing them. They sign in, say what they want, and
+build it in the studio with **Frankie**, the AI chat that plugs in as a React SDK
+(`@frankieai/react`). They watch it change live, then publish it, remix others', download
+a game as a zip, or record a video as an MP4 for Shorts, TikTok and Reels.
 
-Every Polly game follows the practices behind **Ember**, the reference game in
+- **Games** are desktop first (landscape, keyboard and mouse), phone friendly.
+- **Videos** are built on `Kit.film`: 3D (Three.js) or 2D scenes with pop captions,
+  recorded in the browser at 720p in 9:16, 16:9 or 1:1. With an ElevenLabs key (each user
+  adds their own in Settings), **🎙 Voiceover** narrates each scene's caption.
+- **Streaks** count the days in a row someone plays or builds.
+
+Every game and video follows the practices behind **Ember**, the reference game in
 `games/ember`: one readable `index.html`, a `vendor/` folder beside it, no network,
 procedural art and synthesized sound.
 
@@ -73,6 +79,13 @@ Other tasks:
 ```bash
 pnpm build        # builds game-kit, templates, Ember, then the site
 pnpm test         # game-kit, relay and web tests (web starts the Firebase emulators itself)
+```
+
+For Frankie in local dev, put `NEXT_PUBLIC_FRANKIE_PUBLISHABLE_KEY` and `FRANKIE_JWT_SECRET`
+in `apps/web/.env.local` (git-ignored). The workspace allows localhost, and the studio
+points Frankie's tool calls at the site it runs on, so local edits hit your local API.
+
+```bash
 pnpm --filter @polly/ember package   # Ember's original submission zip
 ```
 

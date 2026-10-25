@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Starting ideas, specific enough that Frankie can build something fun from
-// the first message. Six are shown, shuffled after the page loads.
-const IDEAS = [
+export type CreateMode = "game" | "video";
+type Format = "portrait" | "landscape" | "square";
+
+// Starting ideas, specific enough that Frankie can build something good from
+// the first message. Four are shown, shuffled after the page loads.
+const GAME_IDEAS = [
   "A top-down arena shooter: WASD to move, mouse to aim, survive waves of slimes",
   "A tower defense game where you place cannons and frost towers along a winding path",
   "A side-scrolling platformer with double jump, coins and a boss at the end",
@@ -18,7 +21,28 @@ const IDEAS = [
   "An online capture-the-flag game for friends with invite links",
   "A cozy farming game: plant, water and sell crops before winter",
 ];
-const SHOWN = 6;
+const VIDEO_IDEAS = [
+  "How did the ancients cook food?",
+  "Why is the sky blue? Explained in 45 seconds",
+  "The life of a star, from cloud to supernova",
+  "How do bees make honey?",
+  "A day in the life of a Roman soldier",
+  "How volcanoes erupt",
+  "What happens to your body when you sleep",
+  "How the pyramids were built",
+  "The water cycle, told by a raindrop",
+  "Why do cats purr?",
+  "How a seed becomes a tree",
+  "The history of the wheel in 60 seconds",
+];
+const SHOWN = 4;
+
+const FORMATS: { id: Format; label: string; hint: string }[] = [
+  { id: "portrait", label: "Short · 9:16", hint: "YouTube Shorts, TikTok, Reels" },
+  { id: "landscape", label: "Landscape · 16:9", hint: "YouTube, presentations" },
+  { id: "square", label: "Square · 1:1", hint: "Feeds and posts" },
+];
+const FORMAT_WORDS: Record<Format, string> = { portrait: "9:16 vertical short", landscape: "16:9 landscape video", square: "1:1 square video" };
 
 function shuffled<T>(list: readonly T[]): T[] {
   const a = list.slice();
@@ -38,24 +62,40 @@ function pickStarter(idea: string): string {
   return "slime-arena";
 }
 
-// "What do you want to make?" -> a new game open in the studio with Frankie
-// already working on the idea. Making games needs an account: someone signed
-// out goes to sign-up with the idea, and comes back here to start it
-// (`startWith`, from /studio?idea=…).
-export function CreateBox({ signedIn, autoFocus = false, startWith }: { signedIn: boolean; autoFocus?: boolean; startWith?: string }) {
+// What Frankie is asked first. A video starts from the example film, so the
+// request says to replace its scenes with the new topic.
+function firstMessage(mode: CreateMode, idea: string, format: Format): string {
+  if (mode === "game") return idea;
+  return `Make a ${FORMAT_WORDS[format]} about: ${idea}. Replace the example film's scenes with new ones for this topic (6 to 8 scenes, short punchy captions, drawn visuals and sound for each), keep CFG.format as it is, and update the title.`;
+}
+
+// "What do you want to make?" -> a new game or video open in the studio with
+// Frankie already working on it. Making things needs an account: someone signed
+// out goes to sign-up with the idea, and comes back to /studio to start it.
+export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = "game", startFormat = "portrait" }: {
+  signedIn: boolean;
+  autoFocus?: boolean;
+  startWith?: string;
+  startMode?: CreateMode;
+  startFormat?: Format;
+}) {
+  const [mode, setMode] = useState<CreateMode>(startMode);
+  const [format, setFormat] = useState<Format>(startFormat);
   const [idea, setIdea] = useState(startWith ?? "");
   const started = useRef(false);
-  // the first six on the server, a fresh mix once in the browser
-  const [ideas, setIdeas] = useState(() => IDEAS.slice(0, SHOWN));
-  useEffect(() => setIdeas(shuffled(IDEAS).slice(0, SHOWN)), []);
+  const pool = mode === "video" ? VIDEO_IDEAS : GAME_IDEAS;
+  // the first few on the server, a fresh mix once in the browser
+  const [ideas, setIdeas] = useState(() => pool.slice(0, SHOWN));
+  useEffect(() => setIdeas(shuffled(pool).slice(0, SHOWN)), [pool]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function start(text: string) {
-    const ask = text.trim();
-    if (!ask || busy) return;
+    const what = text.trim();
+    if (!what || busy) return;
     if (!signedIn) {
-      window.location.href = `/signup?next=${encodeURIComponent(`/studio?idea=${encodeURIComponent(ask)}`)}`;
+      const back = `/studio?idea=${encodeURIComponent(what)}&mode=${mode}${mode === "video" ? `&format=${format}` : ""}`;
+      window.location.href = `/signup?next=${encodeURIComponent(back)}`;
       return;
     }
     setBusy(true);
@@ -64,11 +104,11 @@ export function CreateBox({ signedIn, autoFocus = false, startWith }: { signedIn
       const res = await fetch("/api/v1/games", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ starterId: pickStarter(ask) }),
+        body: JSON.stringify(mode === "video" ? { starterId: "ancient-cooking", format, title: what.slice(0, 80) } : { starterId: pickStarter(what) }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error?.message || "Couldn't make the game.");
-      window.location.href = `/studio/${body.id}?ask=${encodeURIComponent(ask)}`;
+      if (!res.ok) throw new Error(body?.error?.message || "Couldn't make it.");
+      window.location.href = `/studio/${body.id}?ask=${encodeURIComponent(firstMessage(mode, what, format))}`;
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -83,8 +123,17 @@ export function CreateBox({ signedIn, autoFocus = false, startWith }: { signedIn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startWith, signedIn]);
 
+  const video = mode === "video";
   return (
     <div className="create">
+      <div className="modes" role="tablist" aria-label="What to make">
+        <button type="button" role="tab" aria-selected={!video} className={!video ? "on" : ""} onClick={() => setMode("game")} disabled={busy}>
+          <span>🎮</span> Game
+        </button>
+        <button type="button" role="tab" aria-selected={video} className={video ? "on" : ""} onClick={() => setMode("video")} disabled={busy}>
+          <span>🎬</span> Video
+        </button>
+      </div>
       <form
         className="create-box"
         onSubmit={(e) => {
@@ -101,8 +150,8 @@ export function CreateBox({ signedIn, autoFocus = false, startWith }: { signedIn
               void start(idea);
             }
           }}
-          placeholder="Describe the game you want to make…"
-          aria-label="Describe the game you want to make"
+          placeholder={video ? "What's your video about? A topic, a question, a story…" : "Describe the game you want to make…"}
+          aria-label={video ? "What your video is about" : "Describe the game you want to make"}
           rows={2}
           maxLength={500}
           autoFocus={autoFocus}
@@ -112,6 +161,16 @@ export function CreateBox({ signedIn, autoFocus = false, startWith }: { signedIn
           {busy ? "Making it…" : signedIn ? "Make it ✨" : "Sign up & make it ✨"}
         </button>
       </form>
+      {video && (
+        <div className="formats" role="radiogroup" aria-label="Video format">
+          {FORMATS.map((f) => (
+            <button key={f.id} type="button" role="radio" aria-checked={format === f.id} className={`format ${f.id}${format === f.id ? " on" : ""}`} onClick={() => setFormat(f.id)} disabled={busy} title={f.hint}>
+              <i aria-hidden />
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="ideas">
         {ideas.map((i) => (
           <button key={i} type="button" className="chip" disabled={busy} onClick={() => { setIdea(i); void start(i); }}>

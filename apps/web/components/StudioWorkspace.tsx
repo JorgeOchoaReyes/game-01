@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FrankieInline, FrankieProvider, useFrankieChat } from "@frankieai/react";
 import "@frankieai/react/styles.css";
-import { GameFrame } from "./GameFrame";
-import { isPortrait, usesNet } from "@/lib/game-html";
+import { GameFrame, saveFile } from "./GameFrame";
+import { FILM_FORMATS, filmFormat, isFilm, isPortrait, usesNet, withFilmFormat, type FilmFormat } from "@/lib/game-html";
 
 type StudioGame = { id: string; title: string; version: number; visibility: "private" | "public"; html: string };
 type Version = { version: number; title: string; note: string | null; createdAt: string };
@@ -24,6 +24,13 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
   const [gameError, setGameError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[] | null>(null);
+  const [recordKey, setRecordKey] = useState(0);
+  const [recording, setRecording] = useState(false);
+  // the film's voiceover: null = none; status for the button
+  const [voice, setVoice] = useState<{ scene: number; data: ArrayBuffer }[] | null>(null);
+  const [voiceState, setVoiceState] = useState<"off" | "loading" | "on" | "connect">("off");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const film = isFilm(game.html);
   const etag = useRef<string | null>(null);
   const current = useRef(initial);
 
@@ -64,6 +71,52 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
     const res = await fetch(`/api/v1/games/${game.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
     if (res.ok) await refresh(false);
   };
+
+  // films change shape by rewriting CFG.format, saved as a new version
+  const setFormat = async (format: FilmFormat) => {
+    const html = withFilmFormat(game.html, format);
+    if (!html) return;
+    const res = await fetch(`/api/v1/games/${game.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ html, baseVersion: game.version, note: `Format: ${format}` }),
+    });
+    if (res.ok) {
+      setFull(format !== "portrait");
+      await refresh();
+    }
+  };
+
+  // reads every scene's caption aloud with the user's own ElevenLabs voice
+  const toggleVoice = async () => {
+    if (voiceState === "on") { setVoice(null); setVoiceState("off"); return; }
+    setVoiceState("loading");
+    setVoiceError(null);
+    const res = await fetch(`/api/games/${game.id}/narration`, { method: "POST" });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      setVoiceState(body?.error?.code === "elevenlabs_not_connected" ? "connect" : "off");
+      setVoiceError(body?.error?.message || "Couldn't make the voiceover.");
+      return;
+    }
+    setVoice((body.clips as { scene: number; audio: string }[]).map((c) => {
+      const bin = atob(c.audio), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return { scene: c.scene, data: bytes.buffer };
+    }));
+    setVoiceState("on");
+    setSavedNote("Voiceover ready");
+  };
+
+  const startRecording = () => {
+    setRecording(true);
+    setRecordKey((k) => k + 1);
+  };
+  const onVideo = useCallback((video: Blob, name: string) => {
+    saveFile(video, name);
+    setRecording(false);
+    setSavedNote("Video downloaded");
+  }, []);
 
   const loadVersions = async () => {
     if (versions) return;
@@ -106,14 +159,39 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
             title="Players who enter the same code join the same room"
           />
         )}
+        {film && (
+          <select aria-label="Video format" value={filmFormat(game.html)} onChange={(e) => setFormat(e.target.value as FilmFormat)} disabled={recording}>
+            {FILM_FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        )}
+        {film && (
+          voiceState === "connect" ? (
+            <a className="btn small" href="/settings" title={voiceError ?? undefined}>🎙 Connect ElevenLabs</a>
+          ) : (
+            <button className={`btn small${voiceState === "on" ? " primary" : ""}`} onClick={() => void toggleVoice()} disabled={voiceState === "loading" || recording} title={voiceError ?? "Narrate each scene's caption with your ElevenLabs voice"}>
+              {voiceState === "loading" ? "🎙 Writing voiceover…" : voiceState === "on" ? "🎙 Voiceover on" : "🎙 Voiceover"}
+            </button>
+          )
+        )}
+        {film && (
+          <button className="btn small rec" onClick={startRecording} disabled={recording} title="Plays the video once from the start and saves it as a file">
+            {recording ? "⏺ Recording… let it play" : "⏺ Record video"}
+          </button>
+        )}
         <button className="btn small" onClick={() => { setGameError(null); setRunKey((k) => k + 1); }}>↻ Restart</button>
-        <button className="btn small" onClick={() => setFull((f) => !f)}>{full ? "Phone size" : "Wide"}</button>
+        {!film && <button className="btn small" onClick={() => setFull((f) => !f)}>{full ? "Phone size" : "Wide"}</button>}
         <button className="btn small" onClick={() => save({ visibility: game.visibility === "public" ? "private" : "public" })}>
           {game.visibility === "public" ? "🌐 Public" : "🔒 Private"}
         </button>
         {game.visibility === "public" && <a className="btn small" href={`/g/${game.id}`} target="_blank" rel="noreferrer">Play page ↗</a>}
         <a className="btn small primary" href={`/api/v1/games/${game.id}/download`}>⬇ Download</a>
       </div>
+      {voiceError && voiceState === "off" && (
+        <div className="errbar">
+          <span>🎙 {voiceError}</span>
+          <button className="btn small" onClick={() => setVoiceError(null)}>OK</button>
+        </div>
+      )}
       {gameError && (
         <div className="errbar">
           <span>⚠️ {gameError}</span>
@@ -121,7 +199,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
         </div>
       )}
       <div className={`screen${full ? " full" : ""}`}>
-        <GameFrame html={game.html} runKey={runKey} room={room || undefined} onError={onGameError} />
+        <GameFrame html={game.html} runKey={runKey} room={room || undefined} onError={onGameError} record={recordKey} onVideo={onVideo} voice={film ? voice : undefined} />
       </div>
     </section>
   );
@@ -169,6 +247,10 @@ async function getUserToken(): Promise<string | null> {
 // One Frankie conversation per game, and the game Frankie should work on is in
 // the page context (gameId), as the Polly guide tells the agent.
 function FrankieChat({ settings, game, children }: { settings: FrankieSettings; game: StudioGame; children: ReactNode }) {
+  const api = useMemo(
+    () => (typeof window === "undefined" ? undefined : { baseUrl: `${window.location.origin}/api/v1`, credentials: "same-origin" as const }),
+    [],
+  );
   const context = useMemo(
     () => ({ page: "polly-studio", gameId: game.id, gameTitle: game.title, gameVersion: game.version }),
     [game.id, game.title, game.version],
@@ -178,6 +260,8 @@ function FrankieChat({ settings, game, children }: { settings: FrankieSettings; 
       publishableKey={settings.publishableKey}
       baseUrl={settings.baseUrl}
       getUserToken={getUserToken}
+      // tool calls go to the API of whichever site this is (localhost or production), with its cookie
+      api={api}
       conversationId={`polly-game-${game.id}`}
       context={context}
       // the studio is the user's own game: edits land at once, like a save

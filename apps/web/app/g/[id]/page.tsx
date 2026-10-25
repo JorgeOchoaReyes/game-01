@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const game = await findGame((await params).id).catch(() => null);
-  return { title: game?.visibility === "public" ? `${game.title} · Polly` : "Polly" };
+  return { title: game?.visibility === "public" ? `${game.title} · Polly Studio` : "Polly Studio" };
 }
 
 // A game's shareable page: anyone for public games, only the owner otherwise.

@@ -5,14 +5,18 @@ import { gameEmoji } from "@/lib/catalog";
 import { CreateBox } from "@/components/CreateBox";
 import { GameArt, GameTile } from "@/components/GameTile";
 import { RemixButton } from "@/components/RemixButton";
+import { PollyDog } from "@/components/PollyDog";
 
-export const metadata = { title: "Create · Polly" };
+export const metadata = { title: "Create · Polly Studio" };
 export const dynamic = "force-dynamic";
 
 // Create: describe a new game, pick up one of yours, or start from a starter.
 // Open to everyone to look at; making a game asks for an account first.
-export default async function Create({ searchParams }: { searchParams: Promise<{ idea?: string }> }) {
-  const idea = (await searchParams).idea?.trim().slice(0, 500) || undefined;
+export default async function Create({ searchParams }: { searchParams: Promise<{ idea?: string; mode?: string; format?: string }> }) {
+  const params = await searchParams;
+  const idea = params.idea?.trim().slice(0, 500) || undefined;
+  const mode = params.mode === "video" ? "video" : "game";
+  const format = params.format === "landscape" || params.format === "square" ? params.format : "portrait";
   const user = await currentUser().catch(() => null);
   const games = user ? await listGames(user) : [];
   const starters = listStarters();
@@ -20,9 +24,10 @@ export default async function Create({ searchParams }: { searchParams: Promise<{
   return (
     <main className="wrap create-page">
       <section className="create-hero">
-        <h1>Make a new game</h1>
-        <p className="muted">Say what it is. Frankie starts building right away, and you play it as it grows.</p>
-        <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} />
+        <PollyDog size={88} />
+        <h1>Make something new</h1>
+        <p className="muted">A game or a video. Say what it is: Frankie starts building right away, and you watch it grow.</p>
+        <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} startMode={mode} startFormat={format} />
       </section>
 
       {games.length > 0 && (
@@ -45,7 +50,7 @@ export default async function Create({ searchParams }: { searchParams: Promise<{
       )}
 
       <section>
-        <h2>Or start from a working game</h2>
+        <h2>Or start from something that already works</h2>
         <div className="starters">
           {starters.map((s) => (
             <div className="starter" key={s.id}>

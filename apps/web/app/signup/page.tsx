@@ -3,7 +3,7 @@ import { AuthForm } from "@/components/AuthForm";
 import { currentUser } from "@/lib/server/session";
 import { safeNext } from "@/lib/next-param";
 
-export const metadata = { title: "Sign up · Polly" };
+export const metadata = { title: "Sign up · Polly Studio" };
 
 export default async function Signup({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const next = safeNext((await searchParams).next);

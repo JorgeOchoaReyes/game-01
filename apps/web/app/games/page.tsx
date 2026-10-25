@@ -2,8 +2,9 @@ import Link from "next/link";
 import { EMBER, TEMPLATES, gameEmoji } from "@/lib/catalog";
 import { listPublicGames } from "@/lib/server/games";
 import { GameTile } from "@/components/GameTile";
+import { PollyDog } from "@/components/PollyDog";
 
-export const metadata = { title: "Discover · Polly" };
+export const metadata = { title: "Discover · Polly Studio" };
 export const dynamic = "force-dynamic";
 
 export default async function Discover({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string }> }) {
@@ -18,7 +19,7 @@ export default async function Discover({ searchParams }: { searchParams: Promise
   return (
     <main className="wrap discover">
       <div className="discover-head">
-        <h1>{q ? <>Results for &ldquo;{params.q}&rdquo;</> : "Discover"}</h1>
+        <h1>{q ? <>Results for &ldquo;{params.q}&rdquo;</> : "Discover games and videos"}</h1>
         <div className="tabs" role="tablist">
           <Link role="tab" aria-selected={sort === "new"} className={sort === "new" ? "on" : ""} href={tab("new")}>New</Link>
           <Link role="tab" aria-selected={sort === "popular"} className={sort === "popular" ? "on" : ""} href={tab("popular")}>Popular</Link>
@@ -27,7 +28,8 @@ export default async function Discover({ searchParams }: { searchParams: Promise
 
       {games.length === 0 ? (
         <div className="empty">
-          <p>{q ? "No community games match that yet." : "Nothing shared yet. Make a game and publish it to be the first here."}</p>
+          <PollyDog size={72} mood="calm" />
+          <p>{q ? "No community games match that yet. Polly sniffed everywhere." : "Nothing shared yet. Make something and publish it to be the first here."}</p>
           <Link className="btn primary" href="/studio">Make a game</Link>
         </div>
       ) : (
@@ -40,7 +42,7 @@ export default async function Discover({ searchParams }: { searchParams: Promise
 
       {starters.length > 0 && (
         <>
-          <h2 id="starters">Starters</h2>
+          <h2 id="starters">Starters from Polly</h2>
           <div className="tiles">
             {starters.map((t) => (
               <GameTile key={t.id} href={`/play/${t.id}`} seed={t.id} emoji={t.emoji} title={t.title} by="Polly" />
