@@ -231,6 +231,13 @@ h1, h2, h3 { font-family: var(--heading); font-weight: 700; letter-spacing: -.01
 .screen.full iframe { max-width: none; }
 .errbar { display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: #3a1420; color: #ffd0d8; font-size: 14px; }
 .errbar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.building { position: relative; display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: 14px; overflow: hidden; }
+.building::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 35%; background: var(--accent); animation: building-slide 1.4s ease-in-out infinite; }
+.building .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.building .meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.building .spinner { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: building-spin .8s linear infinite; }
+@keyframes building-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@keyframes building-spin { to { transform: rotate(360deg); } }
 .saved { font-size: 13px; color: var(--good); font-weight: 800; }
 .setup { margin: auto; max-width: 380px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
 .setup h3 { margin: 0; }

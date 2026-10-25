@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FrankieInline, FrankieProvider, useFrankieChat } from "@frankieai/react";
+import { FrankieInline, FrankieProvider, useFrankieChat, type ToolActivity } from "@frankieai/react";
 import "@frankieai/react/styles.css";
 import { GameFrame, saveFile } from "./GameFrame";
 import { FILM_FORMATS, filmFormat, isFilm, isPortrait, usesNet, withFilmFormat, type FilmFormat } from "@/lib/game-html";
@@ -14,9 +14,11 @@ const POLL_MS = 2500;
 
 // Frankie (embedded through @frankieai/react) edits the game through Polly's
 // API as the signed-in user. The studio polls the game and reloads the preview
-// whenever a new version lands, whether Frankie or another tab saved it.
+// whenever a new version lands, whether Frankie or another tab saved it. When
+// Frankie makes a brand-new game, the stage switches to it beside the same chat.
 export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; frankie: FrankieSettings | null }) {
   const [game, setGame] = useState(initial);
+  const [gameId, setGameId] = useState(initial.id);
   const [runKey, setRunKey] = useState(0);
   const [room, setRoom] = useState("");
   // landscape games get the whole stage; portrait ones a phone-sized column
@@ -35,7 +37,12 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
   const current = useRef(initial);
 
   const applyGame = useCallback((next: StudioGame, announce: boolean) => {
-    if (next.html !== current.current.html) {
+    if (next.id !== current.current.id) {
+      setRunKey((k) => k + 1);
+      setGameError(null);
+      setFull(!isPortrait(next.html));
+      setSavedNote(`Opened ${next.title}`);
+    } else if (next.html !== current.current.html) {
       setRunKey((k) => k + 1);
       setGameError(null);
       if (announce) setSavedNote(`Saved v${next.version}`);
@@ -47,13 +54,21 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
 
   const refresh = useCallback(
     async (announce = true) => {
-      const res = await fetch(`/api/v1/games/${initial.id}?include=html`, { headers: etag.current ? { "if-none-match": etag.current } : {} });
+      const res = await fetch(`/api/v1/games/${gameId}?include=html`, { headers: etag.current ? { "if-none-match": etag.current } : {} });
       if (res.status !== 200) return;
       etag.current = res.headers.get("etag");
       applyGame(await res.json(), announce);
     },
-    [initial.id, applyGame],
+    [gameId, applyGame],
   );
+
+  // Frankie made a new game: show it here and keep the conversation going
+  const openGame = useCallback((id: string) => {
+    if (id === current.current.id) return;
+    etag.current = null;
+    setGameId(id);
+    window.history.replaceState(null, "", `/studio/${id}`);
+  }, []);
 
   useEffect(() => {
     void refresh(false);
@@ -131,7 +146,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
 
   const onGameError = useCallback((msg: string) => setGameError((cur) => cur ?? msg), []);
 
-  const stage = (fixButton: ReactNode) => (
+  const stage = (fixButton: ReactNode, building: ReactNode = null) => (
     <section className="stage">
       <div className="toolbar">
         <span className="title">{game.title}</span>
@@ -192,6 +207,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
           <button className="btn small" onClick={() => setVoiceError(null)}>OK</button>
         </div>
       )}
+      {building}
       {gameError && (
         <div className="errbar">
           <span>⚠️ {gameError}</span>
@@ -224,15 +240,16 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
   }
 
   return (
-    <FrankieChat settings={frankie} game={game}>
+    <FrankieChat settings={frankie} game={game} conversationGameId={initial.id}>
       <div className="studio">
         <section className="chat">
           <AutoAsk />
+          <WatchTools gameId={game.id} onNewGame={openGame} onSaved={refresh} />
           <div className="chat-wrap">
             <FrankieInline placeholder="Tell Frankie what to build or change…" />
           </div>
         </section>
-        {stage(gameError ? <FixWithFrankie error={gameError} /> : null)}
+        {stage(gameError ? <FixWithFrankie error={gameError} /> : null, <BuildingBar />)}
       </div>
     </FrankieChat>
   );
@@ -244,9 +261,10 @@ async function getUserToken(): Promise<string | null> {
   return (await res.json()).token;
 }
 
-// One Frankie conversation per game, and the game Frankie should work on is in
-// the page context (gameId), as the Polly guide tells the agent.
-function FrankieChat({ settings, game, children }: { settings: FrankieSettings; game: StudioGame; children: ReactNode }) {
+// One Frankie conversation per game the studio was opened on (it carries on
+// when Frankie switches to a game it just made), and the game Frankie should
+// work on is in the page context (gameId), as the Polly guide tells the agent.
+function FrankieChat({ settings, game, conversationGameId, children }: { settings: FrankieSettings; game: StudioGame; conversationGameId: string; children: ReactNode }) {
   const api = useMemo(
     () => (typeof window === "undefined" ? undefined : { baseUrl: `${window.location.origin}/api/v1`, credentials: "same-origin" as const }),
     [],
@@ -262,7 +280,7 @@ function FrankieChat({ settings, game, children }: { settings: FrankieSettings; 
       getUserToken={getUserToken}
       // tool calls go to the API of whichever site this is (localhost or production), with its cookie
       api={api}
-      conversationId={`polly-game-${game.id}`}
+      conversationId={`polly-game-${conversationGameId}`}
       context={context}
       // the studio is the user's own game: edits land at once, like a save
       approvals="auto"
@@ -288,6 +306,70 @@ function AutoAsk() {
     void send(ask);
   }, [send, restoring]);
   return null;
+}
+
+// POST /games answers 201 with the new game's id first ({"id":"…"), so the id
+// survives even when the activity row's body was cut.
+function createdGameId(tool: ToolActivity): string | null {
+  const call = tool.call;
+  if (tool.status !== "done" || !call || call.request.method.toUpperCase() !== "POST" || call.response?.status !== 201) return null;
+  if (!/\/games\/?(\?|$)/.test(call.request.url)) return null;
+  return call.response.body?.match(/"id"\s*:\s*"([\w-]+)"/)?.[1] ?? null;
+}
+
+// Follows Frankie's tool calls as they finish: a new game opens on the stage,
+// and a save to the current one reloads it now instead of at the next poll.
+// Calls already in the transcript when the chat restores are left alone.
+function WatchTools({ gameId, onNewGame, onSaved }: { gameId: string; onNewGame: (id: string) => void; onSaved: () => void }) {
+  const { messages, restoring } = useFrankieChat();
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (restoring) return;
+    const tools = messages.flatMap((m) => (m.role === "assistant" ? m.tools : []));
+    if (!seen.current) {
+      seen.current = new Set(tools.filter((t) => t.status !== "running").map((t) => t.id));
+      return;
+    }
+    for (const tool of tools) {
+      if (tool.status === "running" || seen.current.has(tool.id)) continue;
+      seen.current.add(tool.id);
+      const created = createdGameId(tool);
+      if (created) onNewGame(created);
+      else if (tool.status === "done" && tool.call && tool.call.request.method.toUpperCase() !== "GET" && tool.call.request.url.includes(`/games/${gameId}`)) onSaved();
+    }
+  }, [messages, restoring, gameId, onNewGame, onSaved]);
+  return null;
+}
+
+// While Frankie works, a bar over the preview says so, with the current step
+// and a timer, so a long build never looks like a stuck page.
+function BuildingBar() {
+  const { messages, busy } = useFrankieChat();
+  const [since, setSince] = useState(0);
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const start = Date.now();
+    setSince(start);
+    setNow(start);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+  if (!busy) return null;
+  const last = messages[messages.length - 1];
+  const tools = last?.role === "assistant" ? last.tools : [];
+  const running = [...tools].reverse().find((t) => t.status === "running");
+  const step = running?.label ?? (last?.role === "assistant" && last.text ? "Writing the reply" : tools.length ? "Working out the next step" : "Thinking");
+  const done = tools.filter((t) => t.status !== "running").length;
+  const secs = Math.max(0, Math.floor((now - since) / 1000));
+  return (
+    <div className="building" role="status" aria-live="polite">
+      <span className="spinner" aria-hidden />
+      <span className="what"><b>Frankie is building</b> · {step}…</span>
+      {done > 0 && <span className="meta">{done} step{done === 1 ? "" : "s"} done</span>}
+      <span className="meta">{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}</span>
+    </div>
+  );
 }
 
 function FixWithFrankie({ error }: { error: string }) {
