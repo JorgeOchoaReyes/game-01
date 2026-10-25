@@ -1,0 +1,36 @@
+{
+  "name": "@polly/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Polly's site and API: play games, build them with Frankie, download them.",
+  "scripts": {
+    "prebuild": "node scripts/copy-runtime.js",
+    "predev": "node scripts/copy-runtime.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@frankieai/react": "^0.2.40",
+    "@polly/ember": "workspace:*",
+    "@polly/game-kit": "workspace:*",
+    "@polly/practices": "workspace:*",
+    "@polly/templates": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.13",
+    "jszip": "^3.10.1",
+    "next": "^16.4.0",
+    "postgres": "^3.4.9",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0"
+  }
+}
