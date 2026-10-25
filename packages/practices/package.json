@@ -1,0 +1,14 @@
+{
+  "name": "@polly/practices",
+  "version": "0.1.0",
+  "private": true,
+  "description": "How Polly games are built: the house rules and the game-kit API reference. Served on the site and to Frankie through the Polly API.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

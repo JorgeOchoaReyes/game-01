@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Star Catcher</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #07061a; overflow: hidden; touch-action: none; user-select: none; }
+  #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 18px; color: #fff; font: bold 18px system-ui, sans-serif; pointer-events: none; z-index: 2; }
+  #hud button { pointer-events: auto; background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="score">0</span><span id="lives"></span><button id="mute" data-kit-ui>🔊</button></div>
+
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * STAR CATCHER: a Polly starter (2D canvas).
+ * Drag anywhere (or WASD / arrows) to move. Catch stars, dodge meteors.
+ * Every 10 stars the sky speeds up. Three hits and the night is over.
+ */
+
+// ---------------------------------------------------------------------------
+// Tuning: every number that changes how the game feels lives here
+// ---------------------------------------------------------------------------
+var CFG = {
+  w: 540, h: 960,
+  playerSpeed: 340, playerR: 18,
+  starEvery: 0.7, meteorEvery: 1.1,
+  fallSpeed: 190, speedUpPerLevel: 0.15, starsPerLevel: 10,
+  lives: 3, invulnTime: 1.2
+};
+
+var view = Kit.canvas({ width: CFG.w, height: CFG.h });
+var ctx = view.ctx;
+
+// ---------------------------------------------------------------------------
+// State. phase: 'title' | 'play' | 'over'
+// ---------------------------------------------------------------------------
+var game, player, things, sky;
+function reset() {
+  game = { phase: 'play', score: 0, lives: CFG.lives, level: 0, starT: 0, meteorT: 0.6, invuln: 0, best: Kit.store.get('star-best', 0) };
+  player = { x: CFG.w / 2, y: CFG.h - 140, r: CFG.playerR, tilt: 0 };
+  things = [];
+  Kit.fx.clear();
+}
+sky = [];
+for (var i = 0; i < 90; i++) sky.push({ x: Math.random() * CFG.w, y: Math.random() * CFG.h, s: Kit.rand(0.4, 2), v: Kit.rand(10, 40) });
+
+function speedMul() { return 1 + game.level * CFG.speedUpPerLevel; }
+
+function spawn(kind) {
+  var r = kind === 'star' ? 14 : Kit.rand(18, 30);
+  things.push({ kind: kind, x: Kit.rand(r, CFG.w - r), y: -r, r: r, vy: CFG.fallSpeed * Kit.rand(0.8, 1.25) * speedMul(), spin: Kit.rand(-3, 3), a: 0 });
+}
+
+// ---------------------------------------------------------------------------
+// Update
+// ---------------------------------------------------------------------------
+function update(dt) {
+  for (var s = 0; s < sky.length; s++) { sky[s].y += sky[s].v * dt; if (sky[s].y > CFG.h) sky[s].y = 0; }
+  if (!game || game.phase !== 'play') return;
+
+  var a = Kit.input.axis(0);
+  player.x = Kit.clamp(player.x + a.x * CFG.playerSpeed * dt, player.r, CFG.w - player.r);
+  player.y = Kit.clamp(player.y + a.y * CFG.playerSpeed * dt, CFG.h * 0.45, CFG.h - player.r - 20);
+  player.tilt = Kit.lerp(player.tilt, a.x * 0.4, 0.2);
+  if (game.invuln > 0) game.invuln -= dt;
+
+  game.starT -= dt; game.meteorT -= dt;
+  if (game.starT <= 0) { spawn('star'); game.starT = CFG.starEvery / speedMul(); }
+  if (game.meteorT <= 0) { spawn('meteor'); game.meteorT = CFG.meteorEvery / speedMul(); }
+
+  for (var i = things.length - 1; i >= 0; i--) {
+    var t = things[i];
+    t.y += t.vy * dt; t.a += t.spin * dt;
+    if (t.y - t.r > CFG.h) { things.splice(i, 1); continue; }
+    if (!Kit.hit(t, player)) continue;
+    things.splice(i, 1);
+    if (t.kind === 'star') {
+      game.score++;
+      Kit.audio.sfx.pickup();
+      Kit.fx.burst(t.x, t.y, 14, '#ffe36e', 160, 0.5, 4);
+      Kit.fx.text(t.x, t.y - 10, '+1', '#ffe36e');
+      if (game.score % CFG.starsPerLevel === 0) { game.level++; Kit.audio.sfx.win(); Kit.fx.text(CFG.w / 2, CFG.h / 2, 'FASTER!', '#8affc1'); }
+    } else if (game.invuln <= 0) {
+      game.lives--; game.invuln = CFG.invulnTime;
+      Kit.audio.sfx.hit(); Kit.fx.shake(12, 0.3);
+      Kit.fx.burst(player.x, player.y, 24, '#ff6a4a', 220, 0.7, 5);
+      if (game.lives <= 0) gameOver();
+    }
+  }
+}
+
+function gameOver() {
+  game.phase = 'over';
+  Kit.audio.sfx.lose();
+  var best = Math.max(game.best, game.score);
+  Kit.store.set('star-best', best);
+  Kit.ui.overlay({ title: 'Night over', body: 'You caught <b>' + game.score + '</b> stars. Best: ' + best + '.', button: 'Play again', onClick: reset });
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function drawStar(x, y, r, a) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.beginPath();
+  for (var i = 0; i < 10; i++) { var rr = i % 2 ? r * 0.45 : r, an = i * Math.PI / 5 - Math.PI / 2; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+  ctx.closePath(); ctx.fillStyle = '#ffe36e'; ctx.shadowColor = '#ffd23a'; ctx.shadowBlur = 16; ctx.fill(); ctx.restore();
+}
+
+function render() {
+  ctx.fillStyle = '#07061a'; ctx.fillRect(0, 0, CFG.w, CFG.h);
+  ctx.save();
+  Kit.fx.applyShake(ctx);
+  for (var s = 0; s < sky.length; s++) { ctx.fillStyle = 'rgba(200,210,255,' + (sky[s].s / 3) + ')'; ctx.fillRect(sky[s].x, sky[s].y, sky[s].s, sky[s].s); }
+
+  if (game) {
+    for (var i = 0; i < things.length; i++) {
+      var t = things[i];
+      if (t.kind === 'star') drawStar(t.x, t.y, t.r, t.a);
+      else { ctx.fillStyle = '#7a4b3a'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,120,60,.35)'; ctx.beginPath(); ctx.arc(t.x, t.y - t.r * 0.6, t.r * 0.7, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (game.phase !== 'title' && (game.invuln <= 0 || Math.floor(game.invuln * 12) % 2 === 0)) {
+      ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.tilt);
+      ctx.fillStyle = '#8ad7ff'; ctx.beginPath(); ctx.moveTo(0, -player.r * 1.3); ctx.lineTo(player.r, player.r); ctx.lineTo(-player.r, player.r); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff8a3a'; ctx.fillRect(-5, player.r, 10, 8 + Math.random() * 8);
+      ctx.restore();
+    }
+  }
+  Kit.fx.draw(ctx);
+  ctx.restore();
+
+  if (game) {
+    document.getElementById('score').textContent = '⭐ ' + game.score;
+    document.getElementById('lives').textContent = new Array(Math.max(game.lives, 0) + 1).join('❤️');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Boot: title screen, first-time tutorial, mute toggle
+// ---------------------------------------------------------------------------
+var muteBtn = document.getElementById('mute');
+muteBtn.textContent = Kit.audio.muted ? '🔇' : '🔊';
+muteBtn.onclick = function () { muteBtn.textContent = Kit.audio.toggle() ? '🔇' : '🔊'; };
+
+var seen = Kit.store.get('star-tutorial', false);
+Kit.ui.overlay({
+  title: 'Star Catcher',
+  body: seen ? 'Catch stars. Dodge meteors.' : 'Drag anywhere (or use WASD / arrows) to fly.<br>Catch ⭐ stars, dodge the meteors.<br>Every 10 stars the sky gets faster.',
+  button: 'Play',
+  onClick: function () { Kit.store.set('star-tutorial', true); reset(); }
+});
+
+Kit.loop(update, render);
+</script>
+</body>
+</html>
