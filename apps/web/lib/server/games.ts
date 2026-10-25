@@ -4,6 +4,7 @@ import { gamesCol, toGame, toGameSummary, toVersion, usersCol, versionsCol, type
 import { newId } from "./auth";
 import { badRequest, notFound, HttpError } from "./http";
 import { applyEdits, checkGame, codeSummary } from "./code";
+import { touchStreak } from "./streaks";
 
 export const MAX_HTML_BYTES = 512 * 1024;
 export const MAX_TITLE = 80;
@@ -41,6 +42,7 @@ export function titleFromHtml(html: string): string | undefined {
 }
 
 export async function createGame(owner: User, input: { title?: unknown; html: unknown; starterId?: string | null }): Promise<Game> {
+  if (owner.anonymous) throw new HttpError(403, "account_required", "Make an account to start a new game. Your guest games come with you.");
   const html = cleanHtml(input.html);
   const title = cleanTitle(input.title, titleFromHtml(html) || "Untitled game");
   const now = new Date();
@@ -50,6 +52,7 @@ export async function createGame(owner: User, input: { title?: unknown; html: un
   batch.create(gamesCol().doc(id), data);
   batch.create(versionsCol(id).doc("1"), { version: 1, title, html, note: input.starterId ? `Started from ${input.starterId}` : "Created", createdAt: now });
   await batch.commit();
+  await touchStreak(owner.id).catch(() => null);
   return game;
 }
 
@@ -126,7 +129,7 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
   const html = input.html !== undefined ? cleanHtml(input.html) : undefined;
   const ref = gamesCol().doc(id);
   // the transaction re-runs if the game changes underneath it, so two saves never share a version
-  return firestore().runTransaction(async (tx) => {
+  const saved = await firestore().runTransaction(async (tx) => {
     const current = toGame(await tx.get(ref));
     if (!current || current.ownerId !== owner.id) throw notFound("No such game in your account.");
     if (input.baseVersion !== undefined && input.baseVersion !== current.version) {
@@ -142,6 +145,9 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
     if (newContent) tx.create(versionsCol(id).doc(String(version)), { version, title, html: game.html, note, createdAt: game.updatedAt });
     return game;
   });
+  // building something counts toward the day's streak
+  if (html !== undefined) await touchStreak(owner.id).catch(() => null);
+  return saved;
 }
 
 // Exact find/replace edits against the version the caller read.

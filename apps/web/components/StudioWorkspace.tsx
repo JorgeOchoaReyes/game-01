@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { FrankieInline, FrankieProvider, useFrankieChat } from "@frankieai/react";
 import "@frankieai/react/styles.css";
 import { GameFrame } from "./GameFrame";
-import { usesNet } from "@/lib/game-html";
+import { isPortrait, usesNet } from "@/lib/game-html";
 
 type StudioGame = { id: string; title: string; version: number; visibility: "private" | "public"; html: string };
 type Version = { version: number; title: string; note: string | null; createdAt: string };
@@ -19,7 +19,8 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
   const [game, setGame] = useState(initial);
   const [runKey, setRunKey] = useState(0);
   const [room, setRoom] = useState("");
-  const [full, setFull] = useState(false);
+  // landscape games get the whole stage; portrait ones a phone-sized column
+  const [full, setFull] = useState(() => !isPortrait(initial.html));
   const [gameError, setGameError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[] | null>(null);

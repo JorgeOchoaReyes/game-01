@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
-  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithPopup,
   type UserCredential,
@@ -13,7 +12,7 @@ import {
 import { authErrorMessage, firebaseAuth } from "@/lib/firebase-client";
 
 // Signs in with Firebase in the browser, then trades the ID token for Polly's
-// session cookie. A guest who signs up or logs in keeps the games they made.
+// session cookie. Someone who was a guest before keeps the games they made.
 export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signup"; next: string; guest?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +26,7 @@ export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signu
       const res = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: await cred.user.getIdToken(), name }),
+        body: JSON.stringify({ idToken: await cred.user.getIdToken(), name, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       if (res.ok) {
         window.location.href = next;
@@ -61,14 +60,9 @@ export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signu
           {signup
             ? guest
               ? "You're building as a guest. Make an account and your games come with you."
-              : "Your games are saved to your account, and Frankie builds with you."
-            : "Log in to get back to your games."}
+              : "Make games with Frankie, keep your streak going, and share what you build."
+            : "Log in to keep building and keep your streak."}
         </p>
-        {!guest && (
-          <button className="btn primary" type="button" disabled={busy} onClick={() => void finish(() => signInAnonymously(firebaseAuth()))}>
-            Jump in as a guest: no account needed
-          </button>
-        )}
         <button className="btn" type="button" disabled={busy} onClick={() => void finish(() => signInWithPopup(firebaseAuth(), new GoogleAuthProvider()))}>
           Continue with Google
         </button>

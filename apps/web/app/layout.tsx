@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Nunito } from "next/font/google";
 import { currentUser } from "@/lib/server/session";
 import { LogoutButton } from "@/components/LogoutButton";
+import { streakStatus } from "@/lib/server/streaks";
 import "./globals.css";
 
 const font = Nunito({ subsets: ["latin"], weight: ["400", "600", "700", "800", "900"], display: "swap" });
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser().catch(() => null);
+  const streak = user && !user.anonymous ? streakStatus(user) : null;
   return (
     <html lang="en" className={font.className}>
       <body>
@@ -31,6 +33,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {user ? (
               <>
                 {user.anonymous && <Link href="/signup" className="btn small save">Save your games</Link>}
+                {streak && (
+                  <span
+                    className={`streak${streak.doneToday ? "" : " cold"}`}
+                    title={
+                      streak.doneToday
+                        ? `${streak.count}-day streak. Best: ${streak.best}. Come back tomorrow!`
+                        : streak.count
+                          ? `${streak.count}-day streak. Play or build something today to keep it.`
+                          : "Play or build something today to start a streak."
+                    }
+                  >
+                    🔥 {streak.count}
+                  </span>
+                )}
                 <span className="avatar" title={user.email ?? "Guest"}>{user.name.slice(0, 1).toUpperCase()}</span>
                 <span className="who">{user.name}</span>
                 <LogoutButton name={user.name} />

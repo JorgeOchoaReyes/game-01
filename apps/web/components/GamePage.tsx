@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { GameArt, formatPlays } from "./GameTile";
 import { PlayTemplate } from "./PlayTemplate";
 
@@ -25,6 +26,7 @@ type Props = {
 // the running game, with full screen one click away.
 export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src, countPlay, actions, notice }: Props) {
   const [playing, setPlaying] = useState(false);
+  const router = useRouter();
   const stage = useRef<HTMLDivElement>(null);
 
   // a multiplayer invite link (?room=CODE) goes straight into the game
@@ -34,7 +36,15 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
 
   const play = () => {
     setPlaying(true);
-    if (countPlay) void fetch(`/api/games/${countPlay}/play`, { method: "POST" }).catch(() => {});
+    if (!countPlay) return;
+    // counts the play and today's streak; refresh so the 🔥 in the top bar updates
+    void fetch(`/api/games/${countPlay}/play`, { method: "POST" })
+      .then(async (res) => { if ((await res.json().catch(() => null))?.streak) router.refresh(); })
+      .catch(() => {});
+  };
+  const stop = () => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    setPlaying(false);
   };
 
   return (
@@ -44,8 +54,8 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
           <>
             {html ? <PlayTemplate html={html} /> : <iframe title={title} src={src} allow="autoplay; fullscreen; gamepad" />}
             <div className="stage-controls">
-              <button className="btn small" onClick={() => void stage.current?.requestFullscreen?.()}>⛶ Full screen</button>
-              <button className="btn small" onClick={() => setPlaying(false)}>✕ Stop</button>
+              <button className="btn small" onClick={() => void stage.current?.requestFullscreen?.()} title="Full screen (Esc to leave)">⛶ Full screen</button>
+              <button className="btn small stop" onClick={stop} title="Stop playing and go back to the game page">■ Stop game</button>
             </div>
           </>
         ) : (
@@ -56,6 +66,8 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
         )}
       </div>
 
+      {playing && <p className="stage-hint muted small">Playing. Press <b>■ Stop playing</b> to end the game, or Esc to leave full screen.</p>}
+
       <div className="game-info">
         <div className="game-title">
           <h1>{title}</h1>
@@ -63,7 +75,11 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
           {notice}
         </div>
         <div className="game-actions">
-          {!playing && <button className="btn play big" onClick={play}>▶ Play</button>}
+          {playing ? (
+            <button className="btn stop big" onClick={stop}>■ Stop playing</button>
+          ) : (
+            <button className="btn play big" onClick={play}>▶ Play</button>
+          )}
           {actions}
         </div>
       </div>

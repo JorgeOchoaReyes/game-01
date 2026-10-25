@@ -49,19 +49,12 @@ describe("sessions", () => {
     expect((await meRoute.GET(new Request(`${ORIGIN}/api/auth/me`, { headers: { cookie: "polly_session=nope" } }))).status).toBe(401);
   });
 
-  it("brings a guest's games along when they sign up", async () => {
+  it("refuses guest sign-ins: making games needs an account", async () => {
     const guest = await signInAsGuest();
-    const guestRes = await startSession(guest.idToken);
-    const guestUser = (await guestRes.json()).user;
-    expect(guestUser).toMatchObject({ anonymous: true, name: "Guest", email: null });
-    const made = await createGame((await getUser(guestUser.id))!, { html });
-
-    const real = await signUpWithEmail();
-    const res = await startSession(real.idToken, { cookie: cookieOf(guestRes), name: "Grace" });
-    const user = (await res.json()).user;
-    expect(user.id).not.toBe(guestUser.id);
-    expect((await listGames((await getUser(user.id))!)).map((g) => g.id)).toEqual([made.id]);
-    expect(await getUser(guestUser.id)).toBeNull();
+    const res = await startSession(guest.idToken);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("account_required");
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("never moves a real account's games to whoever signs in next", async () => {

@@ -27,16 +27,18 @@ These are the practices Ember was built with. Every Polly game follows them.
 
 ## 4. Tuning in one place
 - Put every number that changes how the game feels in a \`CFG\` object at the top (speeds, timers, costs, sizes).
-- Game logic runs in fixed logical units (portrait 540 x 960 by default via \`Kit.canvas()\`), never in screen pixels.
+- Game logic runs in fixed logical units (landscape 1280 x 720 by default via \`Kit.canvas()\`), never in screen pixels.
 
 ## 5. A clear loop and clear phases
 - Use \`Kit.loop(update, render)\`: \`update(dt)\` changes state, \`render()\` only draws.
 - Track a phase: title, play, win / lose. Every game can be won or lost and restarted without reloading.
 - Show the goal on the title overlay. First-time players get a one-line tutorial (remember it with \`Kit.store\`).
 
-## 6. Works on a phone
-- Portrait first. Touch "drag anywhere to move" and WASD / arrows both work through \`Kit.input.axis()\`.
-- HUD is DOM over the canvas. Buttons get \`data-kit-ui\` so taps on them are not read as movement.
+## 6. Desktop first, phone friendly
+- Landscape, made for keyboard and mouse: WASD / arrows to move (\`Kit.input.axis()\`), Space to act, the mouse to aim and click (\`Kit.input.mouse()\`).
+- Show the controls on the title overlay. Touch still works: "drag anywhere to move" comes free with \`Kit.input.axis()\`, and taps through \`Kit.input.tap()\`.
+- Go portrait (\`Kit.canvas({ width: 540, height: 960 })\`) only when the person asks for a phone game.
+- HUD is DOM over the canvas. Buttons get \`data-kit-ui\` so clicks on them are not read as game input.
 - Include a sound toggle (\`Kit.audio.toggle()\`); the choice is saved.
 
 ## 7. Juice
@@ -53,12 +55,13 @@ These are the practices Ember was built with. Every Polly game follows them.
 // The Kit API surface, terse, so an agent never invents functions that do not exist.
 export const GAME_KIT_REFERENCE = `# vendor/game-kit.js API (window.Kit)
 Kit.clamp(v,a,b) Kit.lerp(a,b,t) Kit.rand(a,b) Kit.randInt(a,b) Kit.pick(arr) Kit.dist(ax,ay,bx,by) Kit.dist2(...) Kit.hit(a,b)  // a,b: {x,y,r}
-Kit.canvas({width=540,height=960,id='c',webgl=false,onResize}) -> view {canvas, ctx, width, height, scale, toGame(clientX,clientY)}  // letterboxed, DPR aware; ctx already scaled to logical units
+Kit.canvas({width=1280,height=720,id='c',webgl=false,onResize}) -> view {canvas, ctx, width, height, scale, toGame(clientX,clientY)}  // letterboxed, DPR aware; ctx already scaled to logical units
 Kit.loop(update(dt), render(dt)) -> loop {time, paused, pause(), resume(), toggle(), stop()}  // dt clamped to 1/20s, pauses when tab hidden
 Kit.input.axis(player=0) -> {x,y} (length<=1; P1 = WASD + arrows + touch drag; with setPlayers(2): P1 = WASD+touch, P2 = arrows)
 Kit.input.action(player=0) -> bool this frame (P1 Space/E, P2 Enter/RightShift)
 Kit.input.key(code) Kit.input.pressed(code)  // KeyboardEvent.code, pressed = this frame only
 Kit.input.tap() -> {x,y} in game units or null  // a tap without dragging, this frame
+Kit.input.mouse() -> {x,y,down,clicked}  // game units; down = left button held, clicked = this frame. First call makes the mouse aim instead of drag-to-move
 Kit.input.setPlayers(1|2)
 Kit.audio.sfx.blip() .pickup() .hit() .jump() .shoot() .boom() .win() .lose()
 Kit.audio.tone({freq,to,dur,type:'square'|'sine'|'triangle'|'sawtooth',vol,delay}) Kit.audio.noise({dur,cutoff,vol,delay})
@@ -96,7 +99,7 @@ export const KIT_API: readonly string[] = [
   "Kit.canvas", "Kit.clamp", "Kit.dist", "Kit.dist2",
   "Kit.fx", "Kit.fx.applyShake", "Kit.fx.burst", "Kit.fx.clear", "Kit.fx.draw", "Kit.fx.shake", "Kit.fx.text",
   "Kit.hit",
-  "Kit.input", "Kit.input.action", "Kit.input.axis", "Kit.input.key", "Kit.input.pressed", "Kit.input.setPlayers", "Kit.input.stick", "Kit.input.tap",
+  "Kit.input", "Kit.input.action", "Kit.input.axis", "Kit.input.key", "Kit.input.mouse", "Kit.input.pressed", "Kit.input.setPlayers", "Kit.input.stick", "Kit.input.tap",
   "Kit.lerp", "Kit.loop",
   "Kit.net", "Kit.net.connect", "Kit.net.connected", "Kit.net.disconnect", "Kit.net.hasInvite", "Kit.net.id", "Kit.net.inviteLink",
   "Kit.net.isHost", "Kit.net.on", "Kit.net.peers", "Kit.net.room", "Kit.net.send",

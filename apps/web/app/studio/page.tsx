@@ -10,8 +10,9 @@ export const metadata = { title: "Create · Polly" };
 export const dynamic = "force-dynamic";
 
 // Create: describe a new game, pick up one of yours, or start from a starter.
-// Open to everyone: describing a game signs you in as a guest.
-export default async function Create() {
+// Open to everyone to look at; making a game asks for an account first.
+export default async function Create({ searchParams }: { searchParams: Promise<{ idea?: string }> }) {
+  const idea = (await searchParams).idea?.trim().slice(0, 500) || undefined;
   const user = await currentUser().catch(() => null);
   const games = user ? await listGames(user) : [];
   const starters = listStarters();
@@ -21,7 +22,7 @@ export default async function Create() {
       <section className="create-hero">
         <h1>Make a new game</h1>
         <p className="muted">Say what it is. Frankie starts building right away, and you play it as it grows.</p>
-        <CreateBox signedIn={!!user} autoFocus={games.length === 0} />
+        <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} />
       </section>
 
       {games.length > 0 && (

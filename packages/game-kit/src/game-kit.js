@@ -3,7 +3,7 @@
  *
  * It packages the habits Ember was built on so a new game only has to write the
  * fun part:
- *   Kit.canvas   portrait-fit, DPR-aware 2D canvas (or hand it to Three.js)
+ *   Kit.canvas   letterboxed, DPR-aware 2D canvas, landscape by default (or hand it to Three.js)
  *   Kit.loop     clamped-dt game loop that pauses when the tab is hidden
  *   Kit.input    keyboard + "drag anywhere to move" touch stick, up to 2 local players
  *   Kit.audio    synthesized sound effects (no audio files), with a saved mute toggle
@@ -50,13 +50,13 @@
   };
 
   // -------------------------------------------------------------------------
-  // Kit.canvas: a fixed logical field (portrait by default) scaled to fit
+  // Kit.canvas: a fixed logical field (landscape 1280 x 720 by default) scaled to fit
   // -------------------------------------------------------------------------
   // Game logic always runs in logical units (w x h); the canvas is letterboxed
   // and DPR-scaled so it looks crisp on phones without the game knowing.
   Kit.canvas = function (opts) {
     opts = opts || {};
-    var w = opts.width || 540, h = opts.height || 960;
+    var w = opts.width || 1280, h = opts.height || 720;
     var el = opts.canvas || document.getElementById(opts.id || 'c');
     if (!el) { el = document.createElement('canvas'); el.id = opts.id || 'c'; document.body.appendChild(el); }
     var ctx = opts.webgl ? null : el.getContext('2d');
@@ -135,14 +135,29 @@
     if (e.code.indexOf('Arrow') === 0 || e.code === 'Space') e.preventDefault();
   });
   global.addEventListener('keyup', function (e) { down[e.code] = false; });
-  global.addEventListener('blur', function () { down = {}; });
+  global.addEventListener('blur', function () { down = {}; mouse.down = false; });
+
+  // The mouse, in game units. Until a game calls Kit.input.mouse(), a mouse
+  // drag moves player 1 like a finger does; after, the mouse aims and clicks.
+  var mouse = { x: 0, y: 0, down: false, clicked: false, aiming: false };
+  function trackMouse(e) {
+    if (e.pointerType !== 'mouse') return;
+    var p = Kit.view ? Kit.view.toGame(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+    mouse.x = p.x; mouse.y = p.y;
+  }
 
   function onPointerDown(e) {
     Kit.audio._unlock();
     if (e.target && e.target.closest && e.target.closest('button, a, input, [data-kit-ui]')) return;
+    if (e.pointerType === 'mouse') {
+      trackMouse(e);
+      if (e.button === 0) { mouse.down = true; mouse.clicked = true; }
+      if (mouse.aiming) return;
+    }
     if (!stick.active) { stick.active = true; stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; stick.x = 0; stick.y = 0; stick.moved = false; }
   }
   function onPointerMove(e) {
+    trackMouse(e);
     if (!stick.active || e.pointerId !== stick.id) return;
     var dx = e.clientX - stick.ox, dy = e.clientY - stick.oy, R = 46;
     var m = Math.sqrt(dx * dx + dy * dy);
@@ -151,6 +166,7 @@
     stick.x = dx / R; stick.y = dy / R;
   }
   function onPointerUp(e) {
+    if (e.pointerType === 'mouse' && e.button === 0) mouse.down = false;
     if (e.pointerId !== stick.id) return;
     if (!stick.moved) tapQueue.push(Kit.view ? Kit.view.toGame(e.clientX, e.clientY) : { x: e.clientX, y: e.clientY });
     stick.active = false; stick.x = 0; stick.y = 0;
@@ -185,8 +201,11 @@
     },
     // a tap (pointer down + up without dragging), in game units; null if none this frame
     tap: function () { return tapQueue.length ? tapQueue[0] : null; },
+    // the mouse for aiming: {x, y} in game units, down (left button held),
+    // clicked (pressed this frame). Calling it turns off mouse drag-to-move.
+    mouse: function () { mouse.aiming = true; return mouse; },
     stick: stick,
-    _endFrame: function () { justDown = {}; tapQueue.length = 0; }
+    _endFrame: function () { justDown = {}; tapQueue.length = 0; mouse.clicked = false; }
   };
 
   // -------------------------------------------------------------------------

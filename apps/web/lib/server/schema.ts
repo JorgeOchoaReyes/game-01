@@ -9,11 +9,16 @@ import { firestore } from "./firebase";
 // Only the server reads and writes these (firestore.rules denies clients), so
 // every change goes through the API's checks.
 
+export type Streak = { count: number; best: number; day: string };
+
 export type User = {
   id: string;
   email: string | null;
   name: string;
   anonymous: boolean;
+  // IANA timezone from the browser, for counting streak days
+  tz: string | null;
+  streak: Streak | null;
   createdAt: Date;
 };
 
@@ -52,7 +57,15 @@ const date = (v: unknown): Date => (v instanceof Timestamp ? v.toDate() : v inst
 export function toUser(snap: DocumentSnapshot): User | null {
   const d = snap.data();
   if (!d) return null;
-  return { id: snap.id, email: d.email ?? null, name: d.name, anonymous: !!d.anonymous, createdAt: date(d.createdAt) };
+  return {
+    id: snap.id,
+    email: d.email ?? null,
+    name: d.name,
+    anonymous: !!d.anonymous,
+    tz: d.tz ?? null,
+    streak: d.streak ?? null,
+    createdAt: date(d.createdAt),
+  };
 }
 
 export function toGame(snap: DocumentSnapshot): Game | null {

@@ -4,6 +4,7 @@ import type { DecodedIdToken } from "firebase-admin/auth";
 import { adminAuth } from "./firebase";
 import { ensureUser, getUser } from "./accounts";
 import type { User } from "./schema";
+import { streakStatus } from "./streaks";
 
 // Sign-in is Firebase Auth (email + password, Google, guest). The browser signs
 // in with the Firebase SDK and trades its ID token at POST /api/auth/session for
@@ -112,7 +113,7 @@ export function getRequestUser(req: Request): Promise<User | null> {
 }
 
 export function publicUser(user: User) {
-  return { id: user.id, email: user.email, name: user.name, anonymous: user.anonymous, createdAt: user.createdAt.toISOString() };
+  return { id: user.id, email: user.email, name: user.name, anonymous: user.anonymous, streak: streakStatus(user), createdAt: user.createdAt.toISOString() };
 }
 
 export function sessionCookie(value: string): string {

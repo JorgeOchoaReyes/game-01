@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Slime Arena</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d0f14; overflow: hidden; touch-action: none; user-select: none; }
+  canvas { cursor: none; }
+  #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; gap: 18px; align-items: center; padding: 0 18px; color: #fff; font: bold 18px system-ui, sans-serif; pointer-events: none; z-index: 2; }
+  #hud .grow { flex: 1; }
+  #hud button { pointer-events: auto; background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  #dash { width: 90px; height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; }
+  #dash i { display: block; height: 100%; background: #7cf3ff; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="wave">Wave 1</span><span id="score">0</span><span id="hp"></span><span class="grow"></span><span>DASH</span><span id="dash"><i></i></span><button id="mute" data-kit-ui>🔊</button></div>
+
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * SLIME ARENA: a Polly starter (2D canvas, made for desktop).
+ * WASD / arrows to move, aim with the mouse, hold the left button to shoot,
+ * Space to dash through danger. Big slimes split when they pop.
+ * Survive 10 waves to win. On a touch screen: drag to move, it aims and fires for you.
+ */
+
+// ---------------------------------------------------------------------------
+// Tuning: every number that changes how the game feels lives here
+// ---------------------------------------------------------------------------
+var CFG = {
+  w: 1280, h: 720,
+  playerSpeed: 300, playerR: 18, hp: 5, invulnTime: 1.0,
+  fireEvery: 0.14, bulletSpeed: 900, bulletR: 5, spread: 0.05,
+  dashSpeed: 900, dashTime: 0.16, dashCooldown: 1.2,
+  waves: 10, firstWave: 5, perWave: 3, spawnEvery: 0.45,
+  slimeSpeed: 80, speedPerWave: 0.07, bigChance: 0.25, bigR: 30, smallR: 15, bigHp: 4, smallHp: 1,
+  heartChance: 0.06
+};
+
+var view = Kit.canvas({ width: CFG.w, height: CFG.h });
+var ctx = view.ctx;
+var mouse = Kit.input.mouse();
+
+// ---------------------------------------------------------------------------
+// State. phase: 'title' | 'play' | 'between' | 'over' | 'won'
+// ---------------------------------------------------------------------------
+var game, player, slimes, bullets, pickups;
+function reset() {
+  game = { phase: 'play', wave: 0, score: 0, toSpawn: 0, spawnT: 0, betweenT: 0, best: Kit.store.get('slime-best', 0) };
+  player = { x: CFG.w / 2, y: CFG.h / 2, r: CFG.playerR, hp: CFG.hp, invuln: 0, fireT: 0, dashT: 0, dashCd: 0, dx: 0, dy: 0, aim: 0 };
+  slimes = []; bullets = []; pickups = [];
+  Kit.fx.clear();
+  nextWave();
+}
+
+function nextWave() {
+  game.wave++;
+  game.toSpawn = CFG.firstWave + (game.wave - 1) * CFG.perWave;
+  game.spawnT = 0.8;
+  game.phase = 'play';
+  Kit.audio.sfx.win();
+  Kit.fx.text(CFG.w / 2, CFG.h / 2 - 40, 'WAVE ' + game.wave, '#7cf3ff');
+}
+
+function spawnSlime(big, x, y) {
+  if (x === undefined) {
+    // from a random edge, just outside the arena
+    var side = Kit.randInt(0, 3);
+    x = side === 0 ? -40 : side === 1 ? CFG.w + 40 : Kit.rand(0, CFG.w);
+    y = side === 2 ? -40 : side === 3 ? CFG.h + 40 : Kit.rand(0, CFG.h);
+  }
+  var hue = big ? Kit.randInt(270, 320) : Kit.randInt(90, 150);
+  slimes.push({
+    x: x, y: y, r: big ? CFG.bigR : CFG.smallR, hp: big ? CFG.bigHp : CFG.smallHp, big: big,
+    speed: CFG.slimeSpeed * (big ? 0.75 : 1.25) * (1 + (game.wave - 1) * CFG.speedPerWave) * Kit.rand(0.85, 1.15),
+    wob: Kit.rand(0, 6), flash: 0, color: 'hsl(' + hue + ',80%,58%)'
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Update
+// ---------------------------------------------------------------------------
+function nearestSlime() {
+  var best = null, bd = Infinity;
+  for (var i = 0; i < slimes.length; i++) { var d = Kit.dist2(player.x, player.y, slimes[i].x, slimes[i].y); if (d < bd) { bd = d; best = slimes[i]; } }
+  return best;
+}
+
+function update(dt) {
+  if (!game || (game.phase !== 'play' && game.phase !== 'between')) return;
+  var touch = Kit.input.stick.active;
+
+  // move, or dash
+  var a = Kit.input.axis(0);
+  player.dashCd -= dt;
+  if (Kit.input.pressed('Space') && player.dashCd <= 0 && (a.x || a.y)) {
+    player.dashT = CFG.dashTime; player.dashCd = CFG.dashCooldown; player.dx = a.x; player.dy = a.y;
+    Kit.audio.tone({ freq: 300, to: 900, dur: 0.12, type: 'sawtooth', vol: 0.25 });
+  }
+  if (player.dashT > 0) {
+    player.dashT -= dt;
+    player.x += player.dx * CFG.dashSpeed * dt; player.y += player.dy * CFG.dashSpeed * dt;
+    Kit.fx.burst(player.x, player.y, 2, '#7cf3ff', 40, 0.25, 3);
+  } else {
+    player.x += a.x * CFG.playerSpeed * dt; player.y += a.y * CFG.playerSpeed * dt;
+  }
+  player.x = Kit.clamp(player.x, player.r, CFG.w - player.r);
+  player.y = Kit.clamp(player.y, player.r, CFG.h - player.r);
+  if (player.invuln > 0) player.invuln -= dt;
+
+  // aim and fire: the mouse on desktop, the nearest slime on touch
+  var target = touch ? nearestSlime() : mouse;
+  if (target) player.aim = Math.atan2(target.y - player.y, target.x - player.x);
+  player.fireT -= dt;
+  if ((mouse.down || (touch && target)) && player.fireT <= 0) {
+    player.fireT = CFG.fireEvery;
+    var an = player.aim + Kit.rand(-CFG.spread, CFG.spread);
+    bullets.push({ x: player.x + Math.cos(an) * player.r, y: player.y + Math.sin(an) * player.r, vx: Math.cos(an) * CFG.bulletSpeed, vy: Math.sin(an) * CFG.bulletSpeed, r: CFG.bulletR, life: 1 });
+    Kit.audio.sfx.shoot();
+  }
+
+  // spawn the wave
+  if (game.phase === 'play' && game.toSpawn > 0) {
+    game.spawnT -= dt;
+    if (game.spawnT <= 0) { spawnSlime(Math.random() < CFG.bigChance); game.toSpawn--; game.spawnT = CFG.spawnEvery; }
+  }
+
+  // bullets
+  for (var b = bullets.length - 1; b >= 0; b--) {
+    var bl = bullets[b];
+    bl.x += bl.vx * dt; bl.y += bl.vy * dt; bl.life -= dt;
+    if (bl.life <= 0 || bl.x < -20 || bl.x > CFG.w + 20 || bl.y < -20 || bl.y > CFG.h + 20) { bullets.splice(b, 1); continue; }
+    for (var s = slimes.length - 1; s >= 0; s--) {
+      var sl = slimes[s];
+      if (!Kit.hit(bl, sl)) continue;
+      bullets.splice(b, 1);
+      sl.hp--; sl.flash = 0.08;
+      sl.x += bl.vx * 0.012; sl.y += bl.vy * 0.012;
+      if (sl.hp <= 0) pop(s);
+      else Kit.audio.sfx.blip();
+      break;
+    }
+  }
+
+  // slimes chase, and hurt on touch
+  for (var i = 0; i < slimes.length; i++) {
+    var m = slimes[i];
+    m.wob += dt * 8; if (m.flash > 0) m.flash -= dt;
+    var d = Math.max(Kit.dist(m.x, m.y, player.x, player.y), 1);
+    m.x += (player.x - m.x) / d * m.speed * dt; m.y += (player.y - m.y) / d * m.speed * dt;
+    if (player.invuln <= 0 && player.dashT <= 0 && Kit.hit(m, player)) hurt();
+  }
+
+  // pickups
+  for (var p = pickups.length - 1; p >= 0; p--) {
+    pickups[p].t -= dt;
+    if (pickups[p].t <= 0) { pickups.splice(p, 1); continue; }
+    if (Kit.hit(pickups[p], player)) {
+      player.hp = Math.min(player.hp + 1, CFG.hp); pickups.splice(p, 1);
+      Kit.audio.sfx.pickup(); Kit.fx.text(player.x, player.y - 30, '+❤️', '#ff7a9a');
+    }
+  }
+
+  // wave cleared
+  if (game.phase === 'play' && game.toSpawn === 0 && slimes.length === 0) {
+    if (game.wave >= CFG.waves) return win();
+    game.phase = 'between'; game.betweenT = 2;
+    Kit.fx.text(CFG.w / 2, CFG.h / 2, 'WAVE CLEAR', '#8affc1');
+  }
+  if (game.phase === 'between' && (game.betweenT -= dt) <= 0) nextWave();
+}
+
+function pop(i) {
+  var s = slimes[i];
+  slimes.splice(i, 1);
+  game.score += s.big ? 30 : 10;
+  Kit.audio.sfx.boom();
+  Kit.fx.burst(s.x, s.y, s.big ? 30 : 14, s.color, s.big ? 260 : 180, 0.6, 5);
+  Kit.fx.text(s.x, s.y - s.r, '+' + (s.big ? 30 : 10), '#fff');
+  if (s.big) { Kit.fx.shake(6, 0.15); spawnSlime(false, s.x - 12, s.y); spawnSlime(false, s.x + 12, s.y); }
+  if (Math.random() < CFG.heartChance) pickups.push({ x: s.x, y: s.y, r: 14, t: 8 });
+}
+
+function hurt() {
+  player.hp--; player.invuln = CFG.invulnTime;
+  Kit.audio.sfx.hit(); Kit.fx.shake(14, 0.3);
+  Kit.fx.burst(player.x, player.y, 24, '#ff6a4a', 240, 0.6, 5);
+  if (player.hp <= 0) end(false);
+}
+
+function win() { end(true); }
+
+function end(won) {
+  game.phase = won ? 'won' : 'over';
+  won ? Kit.audio.sfx.win() : Kit.audio.sfx.lose();
+  var best = Math.max(game.best, game.score);
+  Kit.store.set('slime-best', best);
+  Kit.ui.overlay({
+    title: won ? 'Arena cleared!' : 'Slimed',
+    body: (won ? 'All ' + CFG.waves + ' waves survived. ' : 'You reached wave <b>' + game.wave + '</b>. ') + 'Score <b>' + game.score + '</b>. Best: ' + best + '.',
+    button: 'Play again',
+    onClick: reset
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function drawFloor() {
+  ctx.fillStyle = '#141821'; ctx.fillRect(0, 0, CFG.w, CFG.h);
+  ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 1;
+  for (var x = 0; x <= CFG.w; x += 64) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CFG.h); ctx.stroke(); }
+  for (var y = 0; y <= CFG.h; y += 64) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CFG.w, y); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(124,243,255,.25)'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, CFG.w - 4, CFG.h - 4);
+}
+
+function drawSlime(s) {
+  var sq = Math.sin(s.wob) * 0.12;
+  ctx.save(); ctx.translate(s.x, s.y);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, s.r * 0.8, s.r, s.r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.scale(1 + sq, 1 - sq);
+  ctx.fillStyle = s.flash > 0 ? '#fff' : s.color;
+  ctx.beginPath(); ctx.arc(0, 0, s.r, Math.PI, 0); ctx.quadraticCurveTo(s.r, s.r, 0, s.r * 0.9); ctx.quadraticCurveTo(-s.r, s.r, -s.r, 0); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(-s.r * 0.35, -s.r * 0.4, s.r * 0.22, 0, Math.PI * 2); ctx.fill();
+  var look = Math.atan2(player.y - s.y, player.x - s.x), ex = Math.cos(look) * s.r * 0.12, ey = Math.sin(look) * s.r * 0.12;
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(-s.r * 0.3 + ex, -s.r * 0.05 + ey, s.r * 0.13, 0, Math.PI * 2); ctx.arc(s.r * 0.3 + ex, -s.r * 0.05 + ey, s.r * 0.13, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawPlayer() {
+  if (player.invuln > 0 && Math.floor(player.invuln * 14) % 2) return;
+  ctx.save(); ctx.translate(player.x, player.y);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, player.r * 0.9, player.r, player.r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.rotate(player.aim);
+  ctx.fillStyle = '#cfd8e6'; ctx.fillRect(player.r * 0.4, -5, player.r * 1.2, 10);
+  ctx.fillStyle = player.dashT > 0 ? '#7cf3ff' : '#ffb000';
+  ctx.beginPath(); ctx.arc(0, 0, player.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1d1500'; ctx.beginPath(); ctx.arc(player.r * 0.35, -6, 3.5, 0, Math.PI * 2); ctx.arc(player.r * 0.35, 6, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawCrosshair() {
+  if (Kit.input.stick.active) return;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 10, 0, Math.PI * 2); ctx.moveTo(mouse.x - 16, mouse.y); ctx.lineTo(mouse.x - 5, mouse.y);
+  ctx.moveTo(mouse.x + 5, mouse.y); ctx.lineTo(mouse.x + 16, mouse.y); ctx.moveTo(mouse.x, mouse.y - 16); ctx.lineTo(mouse.x, mouse.y - 5);
+  ctx.moveTo(mouse.x, mouse.y + 5); ctx.lineTo(mouse.x, mouse.y + 16); ctx.stroke();
+}
+
+function render() {
+  ctx.save();
+  Kit.fx.applyShake(ctx);
+  drawFloor();
+  if (game) {
+    for (var p = 0; p < pickups.length; p++) { if (pickups[p].t > 2 || Math.floor(pickups[p].t * 8) % 2) { ctx.font = '26px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('❤️', pickups[p].x, pickups[p].y); } }
+    for (var i = 0; i < slimes.length; i++) drawSlime(slimes[i]);
+    ctx.fillStyle = '#fff6b0';
+    for (var b = 0; b < bullets.length; b++) { ctx.beginPath(); ctx.arc(bullets[b].x, bullets[b].y, bullets[b].r, 0, Math.PI * 2); ctx.fill(); }
+    if (game.phase !== 'over') drawPlayer();
+  }
+  Kit.fx.draw(ctx);
+  ctx.restore();
+  drawCrosshair();
+
+  if (game) {
+    document.getElementById('wave').textContent = 'Wave ' + game.wave + ' / ' + CFG.waves;
+    document.getElementById('score').textContent = '⭐ ' + game.score;
+    document.getElementById('hp').textContent = new Array(Math.max(player.hp, 0) + 1).join('❤️');
+    document.querySelector('#dash i').style.width = Math.round(Kit.clamp(1 - player.dashCd / CFG.dashCooldown, 0, 1) * 100) + '%';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Boot: title screen, first-time tutorial, mute toggle
+// ---------------------------------------------------------------------------
+var muteBtn = document.getElementById('mute');
+muteBtn.textContent = Kit.audio.muted ? '🔇' : '🔊';
+muteBtn.onclick = function () { muteBtn.textContent = Kit.audio.toggle() ? '🔇' : '🔊'; };
+
+var seen = Kit.store.get('slime-tutorial', false);
+Kit.ui.overlay({
+  title: 'Slime Arena',
+  body: seen
+    ? 'Survive ' + CFG.waves + ' waves.'
+    : '<b>WASD</b> to move · <b>mouse</b> to aim · <b>hold click</b> to shoot · <b>Space</b> to dash<br>Big slimes split when they pop. Survive ' + CFG.waves + ' waves.',
+  button: 'Fight',
+  onClick: function () { Kit.store.set('slime-tutorial', true); reset(); }
+});
+
+Kit.loop(update, render);
+</script>
+</body>
+</html>

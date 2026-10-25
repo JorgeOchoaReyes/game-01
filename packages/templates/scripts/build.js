@@ -7,6 +7,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const META = {
+  'slime-arena': { title: 'Slime Arena', emoji: '🟢', kind: 'Desktop action', blurb: 'WASD to move, mouse to aim, click to blast slimes. Dash, survive 10 waves.' },
   'star-catcher': { title: 'Star Catcher', emoji: '⭐', kind: '2D arcade', blurb: 'Catch stars, dodge meteors. Canvas, juice, best score.' },
   'campfire-3d': { title: 'Campfire', emoji: '🔥', kind: '3D survival', blurb: 'Ember in miniature: a real fire light, gather and feed.' },
   'coin-rush-multiplayer': { title: 'Coin Rush', emoji: '🪙', kind: 'Multiplayer', blurb: 'Online rooms with invite links, or 2 players on 1 keyboard.' },

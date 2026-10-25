@@ -12,9 +12,9 @@ export async function POST(req: Request) {
   const starter = String(form.get("starter") || "");
   const remix = String(form.get("remix") || "");
   const user = await getRequestUser(req);
-  if (!user) {
+  if (!user || user.anonymous) {
     const back = remix ? `/g/${remix}` : starter ? `/play/${starter}` : "/studio";
-    return Response.redirect(`${origin}/login?next=${encodeURIComponent(back)}`, 303);
+    return Response.redirect(`${origin}/${user ? "signup" : "login"}?next=${encodeURIComponent(back)}`, 303);
   }
 
   if (remix) {

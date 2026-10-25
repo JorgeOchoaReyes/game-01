@@ -43,3 +43,11 @@ export function gameTitle(html: string, fallback = "My game"): string {
 export function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "game";
 }
+
+// Whether a game is laid out for a phone: its canvas is taller than wide
+// (`w: 540, h: 960` in CFG, or width/height passed to Kit.canvas). Games are
+// landscape unless they say otherwise.
+export function isPortrait(html: string): boolean {
+  const m = html.match(/\bw(?:idth)?\s*:\s*(\d{3,4})\s*,\s*h(?:eight)?\s*:\s*(\d{3,4})/);
+  return !!m && Number(m[2]) > Number(m[1]);
+}

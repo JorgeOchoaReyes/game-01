@@ -15,22 +15,37 @@ function cleanName(name: unknown): string | null {
 // The Polly account for a signed-in Firebase user, made on first sight. A guest
 // who later links an email or Google account keeps the same uid, so the
 // account is upgraded in place.
-export async function ensureUser(claims: DecodedIdToken, input: { name?: unknown } = {}): Promise<User> {
+function cleanTz(tz: unknown): string | null {
+  if (typeof tz !== "string" || !tz || tz.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureUser(claims: DecodedIdToken, input: { name?: unknown; tz?: unknown } = {}): Promise<User> {
   const ref = usersCol().doc(claims.uid);
   const anonymous = claims.firebase?.sign_in_provider === "anonymous";
   const email = claims.email ? claims.email.toLowerCase() : null;
   const name = cleanName(input.name) ?? cleanName(claims.name) ?? (email ? email.split("@")[0] : "Guest");
+  const tz = cleanTz(input.tz);
   return firestore().runTransaction(async (tx) => {
     const existing = toUser(await tx.get(ref));
     if (!existing) {
-      const user: User = { id: claims.uid, email, name, anonymous, createdAt: new Date() };
-      tx.set(ref, { email, name, anonymous, createdAt: user.createdAt });
+      const user: User = { id: claims.uid, email, name, anonymous, tz, streak: null, createdAt: new Date() };
+      tx.set(ref, { email, name, anonymous, tz, createdAt: user.createdAt });
       return user;
     }
     if (existing.anonymous && !anonymous) {
-      const upgraded = { ...existing, email, name, anonymous: false };
-      tx.update(ref, { email, name, anonymous: false });
+      const upgraded = { ...existing, email, name, anonymous: false, tz: tz ?? existing.tz };
+      tx.update(ref, { email, name, anonymous: false, tz: upgraded.tz });
       return upgraded;
+    }
+    if (tz && tz !== existing.tz) {
+      tx.update(ref, { tz });
+      return { ...existing, tz };
     }
     return existing;
   });

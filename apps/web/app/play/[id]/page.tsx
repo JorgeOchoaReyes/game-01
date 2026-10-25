@@ -30,6 +30,7 @@ export default async function Play({ params }: { params: Promise<{ id: string }>
       // Ember is our own trusted build, served as static files with its vendor/ folder
       html={template?.html}
       src={template ? undefined : EMBER.src}
+      countPlay={game.id}
       actions={<RemixButton starter={game.id} label="Remix in studio" big />}
     />
   );

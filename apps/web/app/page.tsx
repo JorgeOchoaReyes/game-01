@@ -24,8 +24,8 @@ export default async function Home() {
           <h1>
             {user && !user.anonymous ? <>Hey {user.name}, what&apos;s next?</> : <>What do you want to make?</>}
           </h1>
-          <p>Describe a game. Frankie builds it with you while you play it. Free, nothing to install.</p>
-          <CreateBox signedIn={!!user} autoFocus />
+          <p>Describe a game. Frankie builds it with you while you play it. Free, nothing to install. Come back every day to keep your 🔥 streak.</p>
+          <CreateBox signedIn={!!user && !user.anonymous} autoFocus />
         </div>
       </section>
 
