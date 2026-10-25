@@ -37,62 +37,76 @@ Browser (Polly studio)          Polly (this repo)                 Frankie
 Without a publishable key the studio still works (play, history, publish, download) and
 shows a "Connect Frankie" note where the chat would be.
 
-## 2. Frankie workspace
+## 2. Frankie workspace (all in Frankie's dashboard)
 
-**Allowed origins:** your Polly site's origin(s), for example `https://polly.example.com`
-(and `http://localhost:3000` for a dev workspace).
+1. **Create workspace.** Product name "Polly". **Allowed origins**: your Polly origin(s), e.g.
+   `https://polly.example.com, http://localhost:3000`. Save the **publishable key** and the
+   **JWT secret** (shown once) into Polly's env above.
+2. **Connect your product → OpenAPI by URL**: `https://<polly>/api/v1/openapi.json`
+   - **Access level: write** (GET, POST, PUT, PATCH). Not *full*: that adds DELETE.
+   - **Send the signed-in user's token**: on (the default).
+   - New connections run **in the user's browser** by default: tool calls go from the studio
+     page straight to Polly with the logged-in cookie. That works. Switching the connection
+     to Frankie's server also works, using the forwarded token.
+3. **Allowed tools** (a new connection starts with none). Tick:
 
-**Connection:** an OpenAPI source pointing at Polly.
+   | Tool | What Frankie uses it for |
+   | --- | --- |
+   | `getGameGuide` | the rules and the exact game-kit API, once per conversation |
+   | `listStarters`, `createGame` | starting a new game from a working starter |
+   | `listGames`, `getGame` | finding a game and its outline (sections, functions, line numbers) |
+   | `searchGameCode`, `readGameCode` | reading code in line ranges |
+   | `editGame` | changing code with exact find/replace edits |
+   | `updateGame` | renaming, publishing, or a full rewrite |
+   | `listGameVersions`, `restoreGameVersion` | undo |
 
-```json
-{
-  "apis": [
-    {
-      "name": "polly",
-      "spec": "https://polly.example.com/api/v1/openapi.json",
-      "methods": ["GET", "POST", "PUT"],
-      "forwardUserTokenAs": "Authorization"
-    }
-  ]
-}
-```
-
-- `servers[0].url` in the document is Polly's own `/api/v1`, built from `POLLY_PUBLIC_URL`
-  (or the request origin), so no base-URL override is needed.
-- `forwardUserTokenAs: "Authorization"` is required. Without it Frankie calls the API
-  anonymously and every game operation answers 401.
-- `DELETE` is left out on purpose, so Frankie can't delete games. Add it (and allow
-  `api__polly__deleteGame`) only if you want that.
-
-Tools appear as `api__polly__<operationId>`: `getGameGuide`, `listStarters`, `getStarter`,
-`listGames`, `createGame`, `getGame`, `updateGame`, `listGameVersions`,
-`restoreGameVersion`, `downloadGame`.
-
-**System prompt:** keep it short. The rules live in Polly and Frankie reads them through
-`getGameGuide`, so they never drift.
+   Leave `deleteGame` off unless you want Frankie to delete games.
+4. **Instructions** (the agent's system prompt). Keep it short; the details live in
+   `getGameGuide`, so they never drift from Polly:
 
 ```
 You are Frankie, the game-making partner inside Polly. People describe a game and you
 build it with them, turn by turn, until it is fun.
 
-Before you write or change game code in a conversation, call getGameGuide once and follow
-it exactly: it has the rules every Polly game follows and the only game-kit functions that
-exist. The game the person has open is gameId in the page context: read it with getGame,
-change it, and save the COMPLETE file with updateGame (pass baseVersion and a short note).
-The preview reloads by itself when you save.
+Call getGameGuide once at the start of a conversation and follow it exactly: it has the
+rules every Polly game follows and the only game-kit functions that exist.
 
-Reply in one to three warm, plain sentences: what you changed and one idea to try next.
-Do not paste the game code into the chat.
+The game the person has open is gameId in the page context. Work like a careful coder:
+getGame for the outline, searchGameCode and readGameCode to read the exact lines, then
+editGame with small find/replace edits (baseVersion = the version you read). If an edit
+is refused or comes back with warnings, read the lines again and fix it. Only send a whole
+file (updateGame html) for a brand-new game.
+
+The preview reloads by itself when you save. Reply in one to three warm, plain sentences:
+what you changed and one idea to try next. Never paste game code into the chat.
 ```
 
-**Suggested prompts** (optional): "Make it harder over time", "Add a boss fight",
-"Add 2 players on one keyboard", "Make it online multiplayer", "Add more juice".
+5. **Suggested prompts** (optional): "Make it harder over time", "Add a boss fight",
+   "Add 2 players on one keyboard", "Make it online multiplayer", "Add more juice".
+
+### Why reading and editing instead of whole files
+
+Frankie cuts every API response to `maxResponseChars` (**8,000 characters** by default; it
+can only be raised in Frankie's config, not the dashboard). Games are larger than that
+(Ember is ~120 KB), so the API never sends a whole game to the agent:
+
+- `getGame` returns an outline, not the code.
+- `readGameCode` returns numbered lines, as many as fit, with `nextStartLine` to continue.
+- `editGame` applies exact find/replace edits tied to `baseVersion`. All or nothing, each
+  `find` must match exactly once, and a repeated call is refused (409), never applied twice.
+- Every save is checked: a JavaScript syntax error is refused with its line (the game is
+  untouched), and unknown `Kit.*` names, missing `vendor/` scripts or network use come back
+  as `warnings`.
+
+Tests in `apps/web/test` keep every response, including every page of Ember, under 8,000
+characters and every operation description under Frankie's 600-character cap.
 
 ## 3. Check it
 
 1. Sign in to Polly, open a game in the studio: the chat appears on the left.
-2. Ask "make the player a cat". Frankie should call `getGameGuide`, `getGame`, then
-   `updateGame`, and the preview reloads with a new version in the history menu.
+2. Ask "make the player a cat". Frankie should call `getGameGuide`, `getGame`,
+   `searchGameCode`/`readGameCode`, then `editGame`, and the preview reloads with a new
+   version in the history menu.
 3. If a tool answers 401, run through Frankie's checklist (its README, "Hosted OpenAPI"):
    the usual cause is `forwardUserTokenAs` missing, or `FRANKIE_JWT_SECRET` differing
    between the two sides.

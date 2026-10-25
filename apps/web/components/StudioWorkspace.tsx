@@ -39,7 +39,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
 
   const refresh = useCallback(
     async (announce = true) => {
-      const res = await fetch(`/api/v1/games/${initial.id}`, { headers: etag.current ? { "if-none-match": etag.current } : {} });
+      const res = await fetch(`/api/v1/games/${initial.id}?include=html`, { headers: etag.current ? { "if-none-match": etag.current } : {} });
       if (res.status !== 200) return;
       etag.current = res.headers.get("etag");
       applyGame(await res.json(), announce);

@@ -1,4 +1,5 @@
 import { getRequestUser } from "@/lib/server/auth";
+import { checkGame } from "@/lib/server/code";
 import { createGame, gameJson, listGames } from "@/lib/server/games";
 import { badRequest, originOf, readJson, route, unauthorized } from "@/lib/server/http";
 import { starterHtml } from "@/lib/server/starters";
@@ -17,11 +18,15 @@ export const POST = route(async (req: Request) => {
   const origin = originOf(req);
   let html = body.html;
   let starterId: string | null = null;
+  let warnings: string[] = [];
   if (html === undefined) {
-    if (typeof body.starterId !== "string") throw badRequest("Send html, or a starterId from listStarters.");
+    if (typeof body.starterId !== "string") throw badRequest("Send a starterId from listStarters (or html for a complete new game).");
     starterId = body.starterId;
     html = await starterHtml(starterId, origin);
+  } else {
+    if (typeof html !== "string") throw badRequest("html must be the complete game file as a string.");
+    warnings = checkGame(html).warnings;
   }
   const game = await createGame(user, { title: body.title, html, starterId });
-  return Response.json(gameJson(game, origin, { includeHtml: true }), { status: 201 });
+  return Response.json({ ...gameJson(game, origin, { includeOutline: true }), warnings }, { status: 201 });
 });

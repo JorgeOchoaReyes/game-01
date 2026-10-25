@@ -62,3 +62,12 @@ test('host is the lowest id in the room', () => {
   Kit.net.peers = ['a', 'c'];
   assert.ok(!Kit.net.isHost());
 });
+
+test('KIT_API in @polly/practices lists exactly the runtime surface', () => {
+  const { kitSurface } = require('./surface');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'practices', 'src', 'index.ts'), 'utf8');
+  const list = (name) => JSON.parse('[' + src.match(new RegExp(`export const ${name}: readonly string\\[\\] = \\[([\\s\\S]*?)\\];`))[1].trim().replace(/,\s*$/, '') + ']');
+  const surface = kitSurface();
+  assert.deepStrictEqual(list('KIT_API').slice().sort(), surface.paths);
+  assert.deepStrictEqual(list('KIT_NAMESPACES').slice().sort(), surface.namespaces);
+});

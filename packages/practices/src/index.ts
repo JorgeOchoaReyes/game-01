@@ -76,15 +76,36 @@ Kit.net.send(type, data, toId?) Kit.net.isHost() Kit.net.hasInvite() Kit.net.id 
 // next to the practices, and the basis of Frankie's system prompt for Polly.
 export const AGENT_WORKFLOW = `# Building games through the Polly API
 
-1. The person is usually looking at one game in the Polly studio; its id is in your page context as \`gameId\`.
-   Call \`getGame\` to read its current \`html\` before changing anything.
-2. To change the game, write the COMPLETE new file and call \`updateGame\` with it. Never send a diff or a fragment:
-   the studio preview and the download use exactly what you save. Each save is a new version (\`listGameVersions\`), so
-   nothing is lost and \`restoreGameVersion\` undoes a bad change.
-3. A brand new idea with no game open: \`listStarters\`, pick the closest, then \`createGame\` with its \`starterId\`
-   and a title. Build from the starter's working code instead of from nothing.
-4. Keep what works, change what was asked. Before saving, re-read the file for undefined variables, typos in Kit calls,
-   and missing win / lose / restart paths. A smaller game that runs beats a bigger one that might not.
-5. If the person reports an error from the preview, read the game, fix the cause, and save the whole file again.
-6. To share: \`updateGame\` with \`visibility: "public"\` gives the game a public play page. The download link is \`downloadUrl\`.
+1. The open game's id is \`gameId\` in your page context. \`getGame\` returns its outline: sections and functions with line numbers.
+2. Find code with \`searchGameCode\`, read it with \`readGameCode\` (numbered lines, a range at a time). Read before you change.
+3. Change it with \`editGame\`: exact find/replace edits, \`baseVersion\` = the version you read. Copy \`find\` text exactly from readGameCode,
+   without the "12| " line numbers, with enough lines to be unique. Several edits in one call apply together or not at all.
+4. Only for a whole new game or a total rewrite, send the complete file as \`html\` to \`updateGame\`.
+5. Every save is checked: a JavaScript syntax error is refused with its line (nothing is lost), and unknown Kit names come back as warnings.
+   Fix warnings with another edit. Each save is a new version; \`restoreGameVersion\` undoes one.
+6. No game open: \`listStarters\`, then \`createGame\` with the closest \`starterId\` and a title, then edit it.
+7. Share: \`updateGame\` with \`visibility: "public"\`. Give the person \`playUrl\` or \`downloadUrl\`; never paste game code into the chat.
 `;
+
+// Every public name on window.Kit, used to warn when a saved game calls one
+// that does not exist. packages/game-kit/test checks this against the runtime.
+export const KIT_API: readonly string[] = [
+  "Kit.audio", "Kit.audio.muted", "Kit.audio.noise", "Kit.audio.setMuted", "Kit.audio.sfx",
+  "Kit.audio.sfx.blip", "Kit.audio.sfx.boom", "Kit.audio.sfx.hit", "Kit.audio.sfx.jump", "Kit.audio.sfx.lose",
+  "Kit.audio.sfx.pickup", "Kit.audio.sfx.shoot", "Kit.audio.sfx.win", "Kit.audio.toggle", "Kit.audio.tone",
+  "Kit.canvas", "Kit.clamp", "Kit.dist", "Kit.dist2",
+  "Kit.fx", "Kit.fx.applyShake", "Kit.fx.burst", "Kit.fx.clear", "Kit.fx.draw", "Kit.fx.shake", "Kit.fx.text",
+  "Kit.hit",
+  "Kit.input", "Kit.input.action", "Kit.input.axis", "Kit.input.key", "Kit.input.pressed", "Kit.input.setPlayers", "Kit.input.stick", "Kit.input.tap",
+  "Kit.lerp", "Kit.loop",
+  "Kit.net", "Kit.net.connect", "Kit.net.connected", "Kit.net.disconnect", "Kit.net.hasInvite", "Kit.net.id", "Kit.net.inviteLink",
+  "Kit.net.isHost", "Kit.net.on", "Kit.net.peers", "Kit.net.room", "Kit.net.send",
+  "Kit.pick", "Kit.rand", "Kit.randInt",
+  "Kit.store", "Kit.store.get", "Kit.store.set",
+  "Kit.ui", "Kit.ui.el", "Kit.ui.overlay",
+  "Kit.version", "Kit.view",
+];
+
+// The objects that only group functions: Kit.audio.play is a typo, while
+// Kit.view.ctx is a property of a real value.
+export const KIT_NAMESPACES: readonly string[] = ["Kit.audio", "Kit.audio.sfx", "Kit.fx", "Kit.input", "Kit.net", "Kit.store", "Kit.ui"];

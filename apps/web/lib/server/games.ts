@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { gameVersions, games, users, type Game, type User } from "./schema";
 import { newId } from "./auth";
 import { badRequest, notFound, HttpError } from "./http";
+import { applyEdits, checkGame, codeSummary } from "./code";
 
 export const MAX_HTML_BYTES = 512 * 1024;
 export const MAX_TITLE = 80;
@@ -90,7 +91,19 @@ export async function listPublicGames(limit = 24): Promise<(Game & { ownerName: 
 
 export type GameUpdate = { title?: unknown; html?: unknown; visibility?: unknown; note?: unknown; baseVersion?: unknown };
 
+export type SavedGame = { game: Game; warnings: string[] };
+
 // Saving new html makes a new version; title/visibility-only changes do not.
+// New html is checked first: a syntax error is refused, other problems come back as warnings.
+export async function saveGame(id: string, owner: User, input: GameUpdate): Promise<SavedGame> {
+  const html = input.html !== undefined ? cleanHtml(input.html) : undefined;
+  if (html !== undefined && typeof input.baseVersion !== "number") {
+    throw badRequest("baseVersion is required when sending html: the version you read, so a newer save is never overwritten.");
+  }
+  const warnings = html !== undefined ? checkGame(html).warnings : [];
+  return { game: await updateGame(id, owner, input), warnings };
+}
+
 export async function updateGame(id: string, owner: User, input: GameUpdate): Promise<Game> {
   const current = await getOwnedGame(id, owner);
   if (input.baseVersion !== undefined && input.baseVersion !== current.version) {
@@ -114,6 +127,21 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
     if (newContent) await tx.insert(gameVersions).values({ gameId: id, version, title, html: game.html, note });
     return game;
   });
+}
+
+// Exact find/replace edits against the version the caller read.
+export async function editGame(id: string, owner: User, input: { baseVersion?: unknown; edits?: unknown; note?: unknown }) {
+  if (typeof input.baseVersion !== "number") throw badRequest("baseVersion is required: the version you read with getGame or readGameCode.");
+  const current = await getOwnedGame(id, owner);
+  if (input.baseVersion !== current.version) {
+    throw new HttpError(409, "version_conflict", `The game is at version ${current.version}, not ${input.baseVersion}. Re-read the lines you are changing, then send the edits again with baseVersion ${current.version}.`);
+  }
+  const { html, changed } = applyEdits(current.html, input.edits);
+  if (html === current.html) throw badRequest("These edits change nothing: every replace equals its find.");
+  const { warnings } = checkGame(cleanHtml(html));
+  const note = typeof input.note === "string" ? input.note : `${changed.length} edit${changed.length === 1 ? "" : "s"}`;
+  const game = await updateGame(id, owner, { html, note, baseVersion: current.version });
+  return { game, changed, warnings };
 }
 
 export async function deleteGame(id: string, owner: User): Promise<void> {
@@ -141,7 +169,7 @@ export async function restoreVersion(id: string, owner: User, version: number): 
   return updateGame(id, owner, { html: old.html, title: old.title, note: `Restored version ${version}` });
 }
 
-export function gameJson(game: Game, origin: string, opts: { includeHtml?: boolean } = {}) {
+export function gameJson(game: Game, origin: string, opts: { includeHtml?: boolean; includeOutline?: boolean } = {}) {
   return {
     id: game.id,
     title: game.title,
@@ -154,6 +182,7 @@ export function gameJson(game: Game, origin: string, opts: { includeHtml?: boole
     studioUrl: `${origin}/studio/${game.id}`,
     playUrl: `${origin}/g/${game.id}`,
     downloadUrl: `${origin}/api/v1/games/${game.id}/download`,
+    ...(opts.includeOutline ? codeSummary(game.html) : {}),
     ...(opts.includeHtml ? { html: game.html } : {}),
   };
 }

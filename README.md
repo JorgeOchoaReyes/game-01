@@ -32,11 +32,12 @@ docs/
 
 - **Accounts.** Email and password (scrypt), with sessions in an httpOnly cookie. Login
   also returns a Bearer token, so any client can call the API.
-- **Game API** (`/api/v1`, documented at `/api/v1/openapi.json`):
-  - list, create (from a starter or from html), read, save, delete
-  - version history and restore
-  - download as a zip
-  - the game guide
+- **Game API** (`/api/v1`, documented at `/api/v1/openapi.json`), built for an AI agent:
+  - the game guide and starters
+  - list, create, rename/publish, delete
+  - read code as an outline, search it, read it in line ranges
+  - change it with exact find/replace edits, checked for syntax errors on every save
+  - version history and restore, plus download as a zip
 - **Frankie.** `POST /api/frankie/token` turns the signed-in user into a short-lived JWT for
   the SDK. Frankie forwards that JWT back on its API calls, so it builds games *as the
   user*. Setup: [docs/FRANKIE.md](docs/FRANKIE.md).
