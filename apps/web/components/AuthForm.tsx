@@ -2,38 +2,77 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import {
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  type UserCredential,
+} from "firebase/auth";
+import { authErrorMessage, firebaseAuth } from "@/lib/firebase-client";
 
-export function AuthForm({ mode, next }: { mode: "login" | "signup"; next: string }) {
+// Signs in with Firebase in the browser, then trades the ID token for Polly's
+// session cookie. A guest who signs up or logs in keeps the games they made.
+export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signup"; next: string; guest?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const signup = mode === "signup";
 
-  // onSubmit rather than <form action>: React resets an action form after each
-  // submit, which would wipe the email after a wrong password.
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
+  async function finish(signIn: () => Promise<UserCredential>, name?: string) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(form)),
-    });
-    if (res.ok) {
-      window.location.href = next;
-      return;
+    try {
+      const cred = await signIn();
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: await cred.user.getIdToken(), name }),
+      });
+      if (res.ok) {
+        window.location.href = next;
+        return;
+      }
+      const body = await res.json().catch(() => null);
+      setError(body?.error?.message || "That didn't work. Try again.");
+    } catch (err) {
+      setError(authErrorMessage(err) || null);
     }
-    const body = await res.json().catch(() => null);
-    setError(body?.error?.message || "That didn't work. Try again.");
     setBusy(false);
+  }
+
+  // onSubmit rather than <form action>: React resets an action form after each
+  // submit, which would wipe the email after a wrong password.
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") || "").trim();
+    const password = String(form.get("password") || "");
+    const name = String(form.get("name") || "").trim() || undefined;
+    const auth = firebaseAuth();
+    void finish(() => (signup ? createUserWithEmailAndPassword(auth, email, password) : signInWithEmailAndPassword(auth, email, password)), name);
   }
 
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <h1>{signup ? "Make an account" : "Welcome back"}</h1>
-        <p className="muted">{signup ? "Your games are saved to your account, and Frankie builds with you." : "Log in to get back to your games."}</p>
+        <h1>{signup ? (guest ? "Keep your games" : "Make an account") : "Welcome back"}</h1>
+        <p className="muted">
+          {signup
+            ? guest
+              ? "You're building as a guest. Make an account and your games come with you."
+              : "Your games are saved to your account, and Frankie builds with you."
+            : "Log in to get back to your games."}
+        </p>
+        {!guest && (
+          <button className="btn primary" type="button" disabled={busy} onClick={() => void finish(() => signInAnonymously(firebaseAuth()))}>
+            Jump in as a guest: no account needed
+          </button>
+        )}
+        <button className="btn" type="button" disabled={busy} onClick={() => void finish(() => signInWithPopup(firebaseAuth(), new GoogleAuthProvider()))}>
+          Continue with Google
+        </button>
+        <p className="muted small or">or with email</p>
         {signup && (
           <label>Name<input name="name" autoComplete="name" placeholder="What should we call you?" /></label>
         )}

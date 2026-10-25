@@ -7,22 +7,23 @@
     "prebuild": "node scripts/copy-runtime.js",
     "predev": "node scripts/copy-runtime.js",
     "dev": "next dev",
+    "emulators": "firebase emulators:start --project demo-polly --import .data/firebase --export-on-exit .data/firebase",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "firebase emulators:exec --only auth,firestore --project demo-polly \"vitest run\"",
+    "deploy:firestore": "firebase deploy --only firestore"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.11",
     "@frankieai/react": "^0.2.40",
     "@polly/ember": "workspace:*",
     "@polly/game-kit": "workspace:*",
     "@polly/practices": "workspace:*",
     "@polly/templates": "workspace:*",
-    "drizzle-orm": "^0.45.4",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^13.10.0",
     "jose": "^6.2.13",
     "jszip": "^3.10.1",
     "next": "^16.4.0",
-    "postgres": "^3.4.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -30,6 +31,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "firebase-tools": "^15.34.1",
     "typescript": "^5.7.0",
     "vitest": "^3.2.0"
   }

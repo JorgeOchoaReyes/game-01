@@ -217,7 +217,7 @@ export function openApiDocument(origin: string) {
       },
     },
     components: {
-      securitySchemes: { bearer: { type: "http", scheme: "bearer", bearerFormat: "JWT", description: "The signed-in user's Polly token (Frankie forwards it)." } },
+      securitySchemes: { bearer: { type: "http", scheme: "bearer", bearerFormat: "JWT", description: "The signed-in user's token: Frankie forwards it; other clients send a Firebase ID token." } },
       schemas: {
         Error: {
           type: "object",

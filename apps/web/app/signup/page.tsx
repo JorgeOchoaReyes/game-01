@@ -7,6 +7,8 @@ export const metadata = { title: "Sign up · Polly" };
 
 export default async function Signup({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const next = safeNext((await searchParams).next);
-  if (await currentUser()) redirect(next);
-  return <AuthForm mode="signup" next={next} />;
+  const user = await currentUser();
+  // guests may still log in or sign up: their games come along
+  if (user && !user.anonymous) redirect(next);
+  return <AuthForm mode="signup" next={next} guest={!!user} />;
 }

@@ -1,26 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { authenticate, createAccount } from "@/lib/server/accounts";
 import { createGame, getOwnedGame, getReadableGame, listPublicGames, listVersions, restoreVersion, updateGame } from "@/lib/server/games";
 import { HttpError } from "@/lib/server/http";
+import { account } from "./firebase-helpers";
 
 const html = (title: string) => `<!DOCTYPE html><html><head><title>${title}</title></head><body><script>var x=1;</script></body></html>`;
-let n = 0;
-const account = () => createAccount({ email: `p${++n}-${Date.now()}@example.com`, password: "password123", name: "Player" });
 
 async function status(p: Promise<unknown>): Promise<number> {
   try { await p; return 200; } catch (e) { if (e instanceof HttpError) return e.status; throw e; }
 }
-
-describe("accounts", () => {
-  it("signs up once per email and logs in with the right password only", async () => {
-    await createAccount({ email: "Same@Example.com", password: "password123" });
-    expect(await status(createAccount({ email: "same@example.com", password: "password123" }))).toBe(409);
-    expect((await authenticate({ email: "SAME@example.com", password: "password123" })).email).toBe("same@example.com");
-    expect(await status(authenticate({ email: "same@example.com", password: "nope-nope" }))).toBe(401);
-    expect(await status(authenticate({ email: "nobody@example.com", password: "password123" }))).toBe(401);
-    expect(await status(createAccount({ email: "short@example.com", password: "123" }))).toBe(400);
-  });
-});
 
 describe("games", () => {
   it("versions every html change, keeps history and restores forward", async () => {
@@ -55,5 +42,6 @@ describe("games", () => {
     expect((await getReadableGame(g.id, null)).title).toBe("Secret");
     expect((await listPublicGames()).some((p) => p.id === g.id)).toBe(true);
     expect(await status(updateGame(g.id, other, { title: "still no" }))).toBe(404);
+    expect((await listPublicGames()).find((p) => p.id === g.id)?.ownerName).toBe("Player");
   });
 });

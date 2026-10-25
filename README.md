@@ -51,14 +51,20 @@ docs/
 - **Multiplayer.** `Kit.input.setPlayers(2)` gives two players on one keyboard.
   `Kit.net.connect()` joins an online room on the relay. The first player in is the host,
   and invite links carry `?room=CODE`.
-- **Database.** Postgres when `DATABASE_URL` is set. Otherwise an embedded PGlite database
-  in `apps/web/.data/`, so local dev needs no setup.
+- **Accounts.** Firebase Auth: email + password, Google, or jump in as a guest. The browser
+  signs in with the Firebase SDK and trades its ID token at `POST /api/auth/session` for a
+  session cookie. A guest who later signs up keeps their games. API clients can also send a
+  Firebase ID token as `Authorization: Bearer`.
+- **Database.** Firestore (`users`, `games`, `games/{id}/versions`), written only by the
+  server through the Admin SDK; `firestore.rules` denies browsers. Locally everything runs on
+  the Firebase Emulators, so dev needs no Firebase project.
 
 ## Run it
 
 ```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env.local   # optional locally; see the table below
+pnpm --filter @polly/web emulators            # Firebase Auth + Firestore emulators (needs Java), UI on :4000
 pnpm dev                                       # web on :3000, relay on :8787
 ```
 
@@ -66,7 +72,7 @@ Other tasks:
 
 ```bash
 pnpm build        # builds game-kit, templates, Ember, then the site
-pnpm test         # game-kit, relay and web (API, auth, games) tests
+pnpm test         # game-kit, relay and web tests (web starts the Firebase emulators itself)
 pnpm --filter @polly/ember package   # Ember's original submission zip
 ```
 
@@ -74,8 +80,8 @@ pnpm --filter @polly/ember package   # Ember's original submission zip
 
 | Variable | What |
 | --- | --- |
-| `POLLY_AUTH_SECRET` | signs session cookies and API tokens (required in production) |
-| `DATABASE_URL` | Postgres (required in production; empty locally means PGlite) |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID` | the Firebase web app config (empty locally means the emulators) |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | an Admin SDK service account (required in production) |
 | `POLLY_PUBLIC_URL` | public origin for links and the OpenAPI `servers` URL (defaults to the request origin) |
 | `FRANKIE_JWT_SECRET` | shared with the Frankie workspace; signs the user tokens Frankie verifies |
 | `NEXT_PUBLIC_FRANKIE_PUBLISHABLE_KEY` | the Frankie workspace key; without it the studio shows a setup note instead of the chat |
@@ -88,7 +94,11 @@ The relay reads `PORT` and `MAX_ROOM`.
 
 - `apps/web` deploys to Vercel. In the Vercel project settings, set **Root Directory** to
   `apps/web`. `apps/web/vercel.json` then builds the workspace packages through Turbo
-  before `next build`. Set `DATABASE_URL` (any Postgres: Neon, Supabase, RDS…).
+  before `next build`. Set the Firebase variables above, and add the site's domain to
+  Firebase Auth's authorized domains.
+- Firestore rules and indexes live in `apps/web/firestore.rules` and
+  `firestore.indexes.json`. `.github/workflows/firestore.yml` deploys them on push (keyless,
+  via Workload Identity Federation), or run `pnpm --filter @polly/web deploy:firestore`.
 - `apps/relay` needs a host that keeps WebSockets open (Fly.io, Render, Railway or a small
   VM). Set `NEXT_PUBLIC_RELAY_URL=wss://your-relay` on the web app.
 

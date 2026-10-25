@@ -22,6 +22,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {user ? (
               <>
                 <Link href="/studio">Studio</Link>
+                {user.anonymous && <Link href="/signup" className="btn primary small">Save your games</Link>}
                 <LogoutButton name={user.name} />
               </>
             ) : (

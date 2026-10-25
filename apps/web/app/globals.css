@@ -111,6 +111,8 @@ button { font: inherit; color: inherit; }
 .muted { color: var(--muted); margin: 0; }
 .small { font-size: 14px; }
 .form-error { color: var(--bad); margin: 0; }
+.auth .or { text-align: center; margin: 0; }
+.auth .btn { justify-content: center; }
 .linklike { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; }
 .linklike:hover { color: var(--text); }
 .nav .links { align-items: center; }

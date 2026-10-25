@@ -11,5 +11,7 @@ games/ember/scripts/shots/
 apps/web/public/runtime/
 apps/web/public/games/
 
-# local PGlite database
+# local Firebase emulator data and logs
 apps/web/.data/
+*-debug.log
+.firebase/

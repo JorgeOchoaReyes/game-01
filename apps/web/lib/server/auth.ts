@@ -1,100 +1,82 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-import { eq } from "drizzle-orm";
-import { SignJWT, jwtVerify } from "jose";
-import { getDb } from "./db";
-import { users, type User } from "./schema";
+import { randomBytes } from "node:crypto";
+import { SignJWT, decodeJwt, jwtVerify } from "jose";
+import type { DecodedIdToken } from "firebase-admin/auth";
+import { adminAuth } from "./firebase";
+import { ensureUser, getUser } from "./accounts";
+import type { User } from "./schema";
 
-// Polly's own accounts: email + password, scrypt hashes, HS256 JWTs.
+// Sign-in is Firebase Auth (email + password, Google, guest). The browser signs
+// in with the Firebase SDK and trades its ID token at POST /api/auth/session for
+// a Firebase session cookie.
 //
-// Two kinds of token:
-//   session  (iss polly, aud polly)    signed with POLLY_AUTH_SECRET. Lives in the
-//            httpOnly cookie for the site, and is returned at login so any client
-//            can send it as `Authorization: Bearer`.
-//   frankie  (iss polly, aud frankie)  signed with FRANKIE_JWT_SECRET, 5 minutes.
+// Three kinds of token are accepted, as the cookie or as `Authorization: Bearer`:
+//   Firebase session cookie   set by /api/auth/session, 14 days.
+//   Firebase ID token         what any Firebase client has (user.getIdToken()).
+//   frankie (iss polly, aud frankie)  HS256 with FRANKIE_JWT_SECRET, 5 minutes.
 //            Minted by POST /api/frankie/token for the Frankie SDK. Frankie
 //            forwards it back on every tool call, so the API accepts it too and
 //            Frankie acts exactly as the signed-in user.
 
-const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
-
 export const SESSION_COOKIE = "polly_session";
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14; // Firebase's maximum
 const FRANKIE_TTL_SECONDS = 5 * 60;
-const DEV_SECRET = "polly-dev-only-secret-change-me-polly-dev-only-secret";
-
-function secret(name: "POLLY_AUTH_SECRET" | "FRANKIE_JWT_SECRET"): Uint8Array | null {
-  const value = process.env[name];
-  if (value) return new TextEncoder().encode(value);
-  if (name === "POLLY_AUTH_SECRET" && process.env.NODE_ENV !== "production") return new TextEncoder().encode(DEV_SECRET);
-  return null;
-}
-
-function requireSecret(name: "POLLY_AUTH_SECRET" | "FRANKIE_JWT_SECRET"): Uint8Array {
-  const key = secret(name);
-  if (!key) throw new AuthConfigError(`${name} is not set on the server.`);
-  return key;
-}
 
 export class AuthConfigError extends Error {}
 
-// ---- passwords ---------------------------------------------------------------
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const hash = await scrypt(password, salt, 64);
-  return `scrypt$${salt.toString("base64")}$${hash.toString("base64")}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [kind, saltB64, hashB64] = stored.split("$");
-  if (kind !== "scrypt" || !saltB64 || !hashB64) return false;
-  const expected = Buffer.from(hashB64, "base64");
-  const actual = await scrypt(password, Buffer.from(saltB64, "base64"), expected.length);
-  return timingSafeEqual(actual, expected);
+function frankieSecret(): Uint8Array | null {
+  const value = process.env.FRANKIE_JWT_SECRET;
+  return value ? new TextEncoder().encode(value) : null;
 }
 
 // ---- tokens ------------------------------------------------------------------
 
-export async function signSessionToken(user: Pick<User, "id">): Promise<string> {
-  return new SignJWT({})
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user.id)
-    .setIssuer("polly")
-    .setAudience("polly")
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-    .sign(requireSecret("POLLY_AUTH_SECRET"));
-}
-
 // The token the Frankie SDK exchanges for a Frankie session (see Frankie's docs/auth.md).
 export async function signFrankieToken(user: Pick<User, "id" | "name" | "email">): Promise<string> {
-  return new SignJWT({ name: user.name, email: user.email })
+  const key = frankieSecret();
+  if (!key) throw new AuthConfigError("FRANKIE_JWT_SECRET is not set on the server.");
+  return new SignJWT({ name: user.name, ...(user.email ? { email: user.email } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuer("polly")
     .setAudience("frankie")
     .setIssuedAt()
     .setExpirationTime(`${FRANKIE_TTL_SECONDS}s`)
-    .sign(requireSecret("FRANKIE_JWT_SECRET"));
+    .sign(key);
 }
 
-// Returns the user id a token speaks for, or null if it is not a valid Polly token.
-export async function verifyToken(token: string): Promise<string | null> {
-  const candidates: [Uint8Array | null, string][] = [
-    [secret("POLLY_AUTH_SECRET"), "polly"],
-    [secret("FRANKIE_JWT_SECRET"), "frankie"],
-  ];
-  for (const [key, audience] of candidates) {
-    if (!key) continue;
-    try {
-      const { payload } = await jwtVerify(token, key, { issuer: "polly", audience, algorithms: ["HS256"] });
-      if (typeof payload.sub === "string" && payload.sub) return payload.sub;
-    } catch {
-      /* try the next kind */
-    }
+// Trades a fresh Firebase ID token for a session cookie value.
+export async function createSession(idToken: string): Promise<{ cookie: string; claims: DecodedIdToken }> {
+  const claims = await adminAuth().verifyIdToken(idToken);
+  const cookie = await adminAuth().createSessionCookie(idToken, { expiresIn: SESSION_TTL_SECONDS * 1000 });
+  return { cookie, claims };
+}
+
+export type Identity = { uid: string; claims?: DecodedIdToken };
+
+// Who a token speaks for, or null if it is not one we accept.
+export async function verifyToken(token: string): Promise<Identity | null> {
+  let iss: unknown;
+  try {
+    iss = decodeJwt(token).iss;
+  } catch {
+    return null;
   }
-  return null;
+  try {
+    if (iss === "polly") {
+      const key = frankieSecret();
+      if (!key) return null;
+      const { payload } = await jwtVerify(token, key, { issuer: "polly", audience: "frankie", algorithms: ["HS256"] });
+      return typeof payload.sub === "string" && payload.sub ? { uid: payload.sub } : null;
+    }
+    if (typeof iss === "string" && iss.startsWith("https://session.firebase.google.com/")) {
+      const claims = await adminAuth().verifySessionCookie(token);
+      return { uid: claims.uid, claims };
+    }
+    const claims = await adminAuth().verifyIdToken(token);
+    return { uid: claims.uid, claims };
+  } catch {
+    return null;
+  }
 }
 
 // ---- who is calling ----------------------------------------------------------
@@ -114,14 +96,15 @@ export function tokenFromRequest(req: Request): string | null {
   return readCookie(req.headers.get("cookie"), SESSION_COOKIE);
 }
 
-// The user behind a token, looked up fresh so a deleted account stops working at once.
+// The user behind a token, looked up fresh so a deleted account stops working at
+// once. A Firebase user who has never been here gets their Polly account now.
 export async function userFromToken(token: string | null | undefined): Promise<User | null> {
   if (!token) return null;
-  const id = await verifyToken(token);
-  if (!id) return null;
-  const db = await getDb();
-  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return user ?? null;
+  const who = await verifyToken(token);
+  if (!who) return null;
+  const user = await getUser(who.uid);
+  if (user) return user;
+  return who.claims ? ensureUser(who.claims) : null;
 }
 
 export function getRequestUser(req: Request): Promise<User | null> {
@@ -129,12 +112,12 @@ export function getRequestUser(req: Request): Promise<User | null> {
 }
 
 export function publicUser(user: User) {
-  return { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt.toISOString() };
+  return { id: user.id, email: user.email, name: user.name, anonymous: user.anonymous, createdAt: user.createdAt.toISOString() };
 }
 
-export function sessionCookie(token: string): string {
+export function sessionCookie(value: string): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}${secure}`;
+  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}${secure}`;
 }
 
 export function clearedSessionCookie(): string {

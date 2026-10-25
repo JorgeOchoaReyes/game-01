@@ -8,7 +8,7 @@ export class HttpError extends Error {
 }
 
 export const notFound = (what = "Not found") => new HttpError(404, "not_found", what);
-export const unauthorized = () => new HttpError(401, "unauthorized", "Sign in first (send a Polly token as Authorization: Bearer, or the session cookie).");
+export const unauthorized = () => new HttpError(401, "unauthorized", "Sign in first (send a Firebase ID token as Authorization: Bearer, or the session cookie).");
 export const badRequest = (message: string) => new HttpError(400, "bad_request", message);
 
 export function json(data: unknown, init: ResponseInit = {}): Response {

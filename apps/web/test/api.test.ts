@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { createAccount } from "@/lib/server/accounts";
 import { signFrankieToken } from "@/lib/server/auth";
 import { openApiDocument } from "@/lib/server/openapi";
 import * as gamesRoute from "@/app/api/v1/games/route";
@@ -11,13 +10,14 @@ import * as codeRoute from "@/app/api/v1/games/[gameId]/code/route";
 import * as searchRoute from "@/app/api/v1/games/[gameId]/search/route";
 import * as editsRoute from "@/app/api/v1/games/[gameId]/edits/route";
 import * as guideRoute from "@/app/api/v1/guide/route";
+import { account } from "./firebase-helpers";
 
 const ORIGIN = "http://polly.test";
 const params = <T>(p: T) => ({ params: Promise.resolve(p) });
 
 describe("game API as Frankie calls it", () => {
   it("creates a game, reads it in pieces, edits it, and stays within Frankie's limits", async () => {
-    const user = await createAccount({ email: `api-${Date.now()}@example.com`, password: "password123" });
+    const user = await account();
     const auth = { authorization: `Bearer ${await signFrankieToken(user)}` };
     const send = async (res: Response) => ({ status: res.status, text: await res.text() });
 

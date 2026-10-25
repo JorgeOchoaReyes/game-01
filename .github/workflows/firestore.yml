@@ -1,0 +1,33 @@
+name: Deploy Firestore rules and indexes
+
+# Keyless: GitHub's OIDC token is exchanged for the github-deploy service
+# account through Workload Identity Federation (only this repo may use it).
+on:
+  push:
+    branches: [claude/untitled-session-8nu944]
+    paths:
+      - apps/web/firestore.rules
+      - apps/web/firestore.indexes.json
+      - apps/web/firebase.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/922597015476/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deploy@polly-7140d.iam.gserviceaccount.com
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx --yes firebase-tools@15 deploy --only firestore --project polly-7140d --non-interactive
