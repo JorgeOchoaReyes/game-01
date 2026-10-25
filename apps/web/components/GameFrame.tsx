@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { preparePreview } from "@/lib/game-html";
 
 type Props = {
@@ -16,9 +16,12 @@ type Props = {
 // studio's origin, cookies or storage. Generated code stays in its box.
 export function GameFrame({ html, runKey = 0, room, inviteBase, onError }: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
+  // the preview's <base> is this page's origin, which only the browser knows
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const srcDoc = useMemo(
-    () => preparePreview(html, { room, inviteBase, reportErrors: !!onError }),
-    [html, room, inviteBase, onError],
+    () => (mounted ? preparePreview(html, { room, inviteBase, reportErrors: !!onError }) : ""),
+    [mounted, html, room, inviteBase, onError],
   );
 
   useEffect(() => {
@@ -31,6 +34,10 @@ export function GameFrame({ html, runKey = 0, room, inviteBase, onError }: Props
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
   }, [onError]);
+
+  // render the frame only with its real content: changing srcdoc while the
+  // first (empty) document is still loading doesn't reliably reload it
+  if (!mounted) return null;
 
   return (
     <iframe

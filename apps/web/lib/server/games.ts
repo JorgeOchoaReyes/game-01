@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { firestore } from "./firebase";
 import { gamesCol, toGame, toGameSummary, toVersion, usersCol, versionsCol, type Game, type GameSummary, type User } from "./schema";
 import { newId } from "./auth";
@@ -43,7 +44,7 @@ export async function createGame(owner: User, input: { title?: unknown; html: un
   const html = cleanHtml(input.html);
   const title = cleanTitle(input.title, titleFromHtml(html) || "Untitled game");
   const now = new Date();
-  const game: Game = { id: newId(), ownerId: owner.id, title, html, version: 1, visibility: "private", starterId: input.starterId ?? null, createdAt: now, updatedAt: now };
+  const game: Game = { id: newId(), ownerId: owner.id, title, html, version: 1, visibility: "private", starterId: input.starterId ?? null, plays: 0, createdAt: now, updatedAt: now };
   const { id, ...data } = game;
   const batch = firestore().batch();
   batch.create(gamesCol().doc(id), data);
@@ -73,20 +74,36 @@ export async function getOwnedGame(id: string, owner: User): Promise<Game> {
 }
 
 // Lists leave the code out: a game can be hundreds of KB.
-const SUMMARY_FIELDS = ["ownerId", "title", "version", "visibility", "starterId", "createdAt", "updatedAt"];
+const SUMMARY_FIELDS = ["ownerId", "title", "version", "visibility", "starterId", "plays", "createdAt", "updatedAt"];
 
 export async function listGames(owner: User): Promise<GameSummary[]> {
   const snap = await gamesCol().where("ownerId", "==", owner.id).orderBy("updatedAt", "desc").select(...SUMMARY_FIELDS).get();
   return snap.docs.map((d) => toGameSummary(d)!);
 }
 
-export async function listPublicGames(limit = 24): Promise<(GameSummary & { ownerName: string })[]> {
-  const snap = await gamesCol().where("visibility", "==", "public").orderBy("updatedAt", "desc").limit(limit).select(...SUMMARY_FIELDS).get();
+export type PublicGame = GameSummary & { ownerName: string };
+
+// Public games, newest first or most played first.
+export async function listPublicGames(limit = 24, sort: "new" | "popular" = "new"): Promise<PublicGame[]> {
+  const order = sort === "popular" ? "plays" : "updatedAt";
+  const snap = await gamesCol().where("visibility", "==", "public").orderBy(order, "desc").limit(limit).select(...SUMMARY_FIELDS).get();
   const games = snap.docs.map((d) => toGameSummary(d)!);
   const ownerIds = [...new Set(games.map((g) => g.ownerId))];
   const owners = ownerIds.length ? await firestore().getAll(...ownerIds.map((id) => usersCol().doc(id)), { fieldMask: ["name"] }) : [];
   const names = new Map(owners.filter((o) => o.exists).map((o) => [o.id, String(o.get("name") ?? "someone")]));
   return games.filter((g) => names.has(g.ownerId)).map((g) => ({ ...g, ownerName: names.get(g.ownerId)! }));
+}
+
+export async function ownerName(game: Pick<Game, "ownerId">): Promise<string> {
+  const owner = await usersCol().doc(game.ownerId).get();
+  return String(owner.get("name") ?? "someone");
+}
+
+// Counts a press of Play on a public game, except by its owner.
+export async function recordPlay(id: string, viewer: User | null): Promise<void> {
+  const game = await findGame(id);
+  if (!game || game.visibility !== "public" || game.ownerId === viewer?.id) return;
+  await gamesCol().doc(id).update({ plays: FieldValue.increment(1) });
 }
 
 export type GameUpdate = { title?: unknown; html?: unknown; visibility?: unknown; note?: unknown; baseVersion?: unknown };

@@ -148,6 +148,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
     <FrankieChat settings={frankie} game={game}>
       <div className="studio">
         <section className="chat">
+          <AutoAsk />
           <div className="chat-wrap">
             <FrankieInline placeholder="Tell Frankie what to build or change…" />
           </div>
@@ -178,10 +179,30 @@ function FrankieChat({ settings, game, children }: { settings: FrankieSettings; 
       getUserToken={getUserToken}
       conversationId={`polly-game-${game.id}`}
       context={context}
+      // the studio is the user's own game: edits land at once, like a save
+      approvals="auto"
     >
       {children}
     </FrankieProvider>
   );
+}
+
+// /studio/<id>?ask=… (from the "describe your game" box) sends that idea to
+// Frankie once the chat is ready, then drops it from the address bar.
+function AutoAsk() {
+  const { send, restoring } = useFrankieChat();
+  const sent = useRef(false);
+  useEffect(() => {
+    if (sent.current || restoring) return;
+    const url = new URL(window.location.href);
+    const ask = url.searchParams.get("ask")?.trim();
+    if (!ask) return;
+    sent.current = true;
+    url.searchParams.delete("ask");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    void send(ask);
+  }, [send, restoring]);
+  return null;
 }
 
 function FixWithFrankie({ error }: { error: string }) {

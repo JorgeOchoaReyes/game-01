@@ -16,3 +16,9 @@ export const EMBER = {
 export function findTemplate(id: string | null | undefined): GameTemplate | undefined {
   return TEMPLATES.find((t) => t.id === id);
 }
+
+// A game's cover emoji: its starter's, or a controller.
+export function gameEmoji(starterId: string | null | undefined): string {
+  if (starterId === EMBER.id) return EMBER.emoji;
+  return findTemplate(starterId)?.emoji ?? "🎮";
+}

@@ -1,38 +1,48 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Nunito } from "next/font/google";
 import { currentUser } from "@/lib/server/session";
 import { LogoutButton } from "@/components/LogoutButton";
 import "./globals.css";
 
+const font = Nunito({ subsets: ["latin"], weight: ["400", "600", "700", "800", "900"], display: "swap" });
+
 export const metadata: Metadata = {
   title: "Polly · make games, play games",
-  description: "A tiny game engine, a home for your games, and Frankie to build them with you.",
+  description: "Describe a game and play it while Frankie builds it. Share it, remix others, download it.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser().catch(() => null);
   return (
-    <html lang="en">
+    <html lang="en" className={font.className}>
       <body>
-        <nav className="nav">
-          <Link href="/" className="brand">🦜 Polly</Link>
-          <div className="links">
-            <Link href="/games">Games</Link>
-            <Link href="/practices">How games are built</Link>
+        <header className="topbar">
+          <Link href="/" className="brand">🦜 <span>Polly</span></Link>
+          <nav className="topnav">
+            <Link href="/">Home</Link>
+            <Link href="/games">Discover</Link>
+            <Link href="/studio" className="btn primary small">＋ Create</Link>
+          </nav>
+          <form className="search" action="/games" role="search">
+            <input name="q" type="search" placeholder="Search games" aria-label="Search games" />
+          </form>
+          <div className="account">
             {user ? (
               <>
-                <Link href="/studio">Studio</Link>
-                {user.anonymous && <Link href="/signup" className="btn primary small">Save your games</Link>}
+                {user.anonymous && <Link href="/signup" className="btn small save">Save your games</Link>}
+                <span className="avatar" title={user.email ?? "Guest"}>{user.name.slice(0, 1).toUpperCase()}</span>
+                <span className="who">{user.name}</span>
                 <LogoutButton name={user.name} />
               </>
             ) : (
               <>
-                <Link href="/login">Log in</Link>
-                <Link href="/signup" className="btn primary small">Sign up</Link>
+                <Link href="/login" className="btn small">Log in</Link>
+                <Link href="/signup" className="btn small primary">Sign up</Link>
               </>
             )}
           </div>
-        </nav>
+        </header>
         {children}
       </body>
     </html>

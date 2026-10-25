@@ -1,64 +1,88 @@
 import Link from "next/link";
-import { EMBER, TEMPLATES } from "@/lib/catalog";
-import { RemixButton } from "@/components/RemixButton";
+import { EMBER, TEMPLATES, gameEmoji } from "@/lib/catalog";
+import { currentUser } from "@/lib/server/session";
+import { listGames, listPublicGames } from "@/lib/server/games";
+import { CreateBox } from "@/components/CreateBox";
+import { GameTile } from "@/components/GameTile";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+// Home: say what you want to make and you're in the studio with Frankie
+// building it. Below, games to play, like a game platform's front page.
+export default async function Home() {
+  const user = await currentUser().catch(() => null);
+  const [mine, popular, fresh] = await Promise.all([
+    user ? listGames(user).catch(() => []) : [],
+    listPublicGames(12, "popular").catch(() => []),
+    listPublicGames(12, "new").catch(() => []),
+  ]);
+
   return (
     <main>
-      <section className="hero wrap">
-        <h1>
-          Make a game. <em>Play it right away.</em>
-        </h1>
-        <p>
-          Polly is a tiny game engine and a home for your games. Tell Frankie what you want and it builds the game
-          with you while you play it. Then share it, play online with friends, or download it.
-        </p>
-        <div className="actions" style={{ justifyContent: "center", display: "flex", gap: 10 }}>
-          <Link className="btn primary" href="/studio">Open the studio</Link>
-          <Link className="btn" href="/games">Play games</Link>
+      <section className="hero">
+        <div className="wrap">
+          <h1>
+            {user && !user.anonymous ? <>Hey {user.name}, what&apos;s next?</> : <>What do you want to make?</>}
+          </h1>
+          <p>Describe a game. Frankie builds it with you while you play it. Free, nothing to install.</p>
+          <CreateBox signedIn={!!user} autoFocus />
         </div>
       </section>
 
-      <section className="section wrap">
-        <div className="steps">
-          <div className="card"><b>1 · Describe</b><p>Chat with Frankie. Every game starts from a starter that already works.</p></div>
-          <div className="card"><b>2 · Play</b><p>The game reloads next to the chat each time Frankie saves. Broken? One click asks for a fix.</p></div>
-          <div className="card"><b>3 · Share</b><p>Make it public for a play link, invite friends with a room code, or download the zip.</p></div>
-        </div>
-      </section>
+      <div className="wrap">
+        {mine.length > 0 && (
+          <Row title="Continue building" href="/studio">
+            {mine.slice(0, 12).map((g) => (
+              <GameTile key={g.id} href={`/studio/${g.id}`} seed={g.id} emoji={gameEmoji(g.starterId)} title={g.title} badge={g.visibility === "public" ? "Public" : `v${g.version}`} />
+            ))}
+          </Row>
+        )}
 
-      <section className="section wrap">
-        <h2>Start from an example</h2>
-        <p>Every Polly game follows the same practices as Ember, our reference game.</p>
-        <div className="grid">
-          <div className="card feature">
-            <div className="emoji">{EMBER.emoji}</div>
-            <div style={{ flex: 1 }}>
-              <div className="kind">{EMBER.kind}</div>
-              <h3>{EMBER.title}</h3>
-              <p>{EMBER.blurb}</p>
-              <div className="actions">
-                <Link className="btn primary small" href="/play/ember">Play Ember</Link>
-                <Link className="btn small" href="/practices">See how it&apos;s built</Link>
-              </div>
-            </div>
-          </div>
+        {popular.some((g) => g.plays > 0) && (
+          <Row title="Popular" href="/games?sort=popular">
+            {popular.map((g) => (
+              <GameTile key={g.id} href={`/g/${g.id}`} seed={g.id} emoji={gameEmoji(g.starterId)} title={g.title} by={g.ownerName} plays={g.plays} />
+            ))}
+          </Row>
+        )}
+
+        {fresh.length > 0 && (
+          <Row title="New from the community" href="/games">
+            {fresh.map((g) => (
+              <GameTile key={g.id} href={`/g/${g.id}`} seed={g.id} emoji={gameEmoji(g.starterId)} title={g.title} by={g.ownerName} plays={g.plays} />
+            ))}
+          </Row>
+        )}
+
+        <Row title="Play the starters" href="/games#starters">
+          <GameTile href={`/play/${EMBER.id}`} seed={EMBER.id} emoji={EMBER.emoji} title={EMBER.title} by="Polly" badge="Featured" />
           {TEMPLATES.map((t) => (
-            <div className="card" key={t.id}>
-              <div className="emoji">{t.emoji}</div>
-              <div className="kind">{t.kind}</div>
-              <h3>{t.title}</h3>
-              <p>{t.blurb}</p>
-              <div className="actions">
-                <Link className="btn small" href={`/play/${t.id}`}>Play</Link>
-                <RemixButton starter={t.id} />
-              </div>
-            </div>
+            <GameTile key={t.id} href={`/play/${t.id}`} seed={t.id} emoji={t.emoji} title={t.title} by="Polly" />
           ))}
-        </div>
-      </section>
+        </Row>
 
-      <footer className="footer">Polly · games are single readable files you own.</footer>
+        <section className="how">
+          <div><b>1. Describe it</b><p>&ldquo;A cat in space dodging asteroids.&rdquo; That&apos;s enough to start.</p></div>
+          <div><b>2. Play as it&apos;s built</b><p>The game reloads beside the chat every time Frankie saves. Ask for changes as you go.</p></div>
+          <div><b>3. Publish and share</b><p>Make it public to get a link and a spot on Discover, or download it as a zip.</p></div>
+        </section>
+      </div>
+
+      <footer className="footer">
+        Polly · every game is one readable file you own · <Link href="/practices">How games are built</Link>
+      </footer>
     </main>
+  );
+}
+
+function Row({ title, href, children }: { title: string; href: string; children: React.ReactNode }) {
+  return (
+    <section className="row">
+      <div className="row-head">
+        <h2>{title}</h2>
+        <Link href={href} className="see-all">See all ›</Link>
+      </div>
+      <div className="row-tiles">{children}</div>
+    </section>
   );
 }

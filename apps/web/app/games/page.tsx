@@ -1,50 +1,53 @@
 import Link from "next/link";
-import { EMBER, TEMPLATES } from "@/lib/catalog";
+import { EMBER, TEMPLATES, gameEmoji } from "@/lib/catalog";
 import { listPublicGames } from "@/lib/server/games";
-import { RemixButton } from "@/components/RemixButton";
+import { GameTile } from "@/components/GameTile";
 
-export const metadata = { title: "Games · Polly" };
+export const metadata = { title: "Discover · Polly" };
 export const dynamic = "force-dynamic";
 
-export default async function Games() {
-  const examples = [EMBER, ...TEMPLATES];
-  const community = await listPublicGames(24).catch(() => []);
+export default async function Discover({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string }> }) {
+  const params = await searchParams;
+  const sort = params.sort === "popular" ? "popular" : "new";
+  const q = (params.q ?? "").trim().toLowerCase();
+  const all = await listPublicGames(96, sort).catch(() => []);
+  const games = q ? all.filter((g) => g.title.toLowerCase().includes(q) || g.ownerName.toLowerCase().includes(q)) : all;
+  const starters = [{ id: EMBER.id, title: EMBER.title, emoji: EMBER.emoji }, ...TEMPLATES].filter((t) => !q || t.title.toLowerCase().includes(q));
+  const tab = (s: "new" | "popular") => `/games?sort=${s}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+
   return (
-    <main className="section wrap">
-      <h2>Made with Polly</h2>
-      <p>Games people have shared. Make yours public from the studio to show up here.</p>
-      {community.length === 0 ? (
-        <p className="muted">Nothing shared yet. Be the first.</p>
+    <main className="wrap discover">
+      <div className="discover-head">
+        <h1>{q ? <>Results for &ldquo;{params.q}&rdquo;</> : "Discover"}</h1>
+        <div className="tabs" role="tablist">
+          <Link role="tab" aria-selected={sort === "new"} className={sort === "new" ? "on" : ""} href={tab("new")}>New</Link>
+          <Link role="tab" aria-selected={sort === "popular"} className={sort === "popular" ? "on" : ""} href={tab("popular")}>Popular</Link>
+        </div>
+      </div>
+
+      {games.length === 0 ? (
+        <div className="empty">
+          <p>{q ? "No community games match that yet." : "Nothing shared yet. Make a game and publish it to be the first here."}</p>
+          <Link className="btn primary" href="/studio">Make a game</Link>
+        </div>
       ) : (
-        <div className="grid">
-          {community.map((g) => (
-            <div className="card" key={g.id}>
-              <div className="kind">by {g.ownerName}</div>
-              <h3>{g.title}</h3>
-              <div className="actions">
-                <Link className="btn primary small" href={`/g/${g.id}`}>Play</Link>
-              </div>
-            </div>
+        <div className="tiles">
+          {games.map((g) => (
+            <GameTile key={g.id} href={`/g/${g.id}`} seed={g.id} emoji={gameEmoji(g.starterId)} title={g.title} by={g.ownerName} plays={g.plays} />
           ))}
         </div>
       )}
 
-      <h2 style={{ marginTop: 40 }}>Examples</h2>
-      <p>Play the starters, or open one in the studio and make it yours.</p>
-      <div className="grid">
-        {examples.map((g) => (
-          <div className="card" key={g.id}>
-            <div className="emoji">{g.emoji}</div>
-            <div className="kind">{g.kind}</div>
-            <h3>{g.title}</h3>
-            <p>{g.blurb}</p>
-            <div className="actions">
-              <Link className="btn small" href={`/play/${g.id}`}>Play</Link>
-              <RemixButton starter={g.id} />
-            </div>
+      {starters.length > 0 && (
+        <>
+          <h2 id="starters">Starters</h2>
+          <div className="tiles">
+            {starters.map((t) => (
+              <GameTile key={t.id} href={`/play/${t.id}`} seed={t.id} emoji={t.emoji} title={t.title} by="Polly" />
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </main>
   );
 }

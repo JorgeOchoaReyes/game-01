@@ -25,6 +25,8 @@ export type Game = {
   version: number;
   visibility: "private" | "public";
   starterId: string | null;
+  // times someone other than the owner pressed Play on its public page
+  plays: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -64,6 +66,7 @@ export function toGame(snap: DocumentSnapshot): Game | null {
     version: d.version,
     visibility: d.visibility,
     starterId: d.starterId ?? null,
+    plays: d.plays ?? 0,
     createdAt: date(d.createdAt),
     updatedAt: date(d.updatedAt),
   };

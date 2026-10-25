@@ -1,55 +1,64 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/server/session";
 import { listGames } from "@/lib/server/games";
 import { listStarters } from "@/lib/server/starters";
+import { gameEmoji } from "@/lib/catalog";
+import { CreateBox } from "@/components/CreateBox";
+import { GameArt, GameTile } from "@/components/GameTile";
+import { RemixButton } from "@/components/RemixButton";
 
-export const metadata = { title: "Studio · Polly" };
+export const metadata = { title: "Create · Polly" };
 export const dynamic = "force-dynamic";
 
-export default async function StudioHome() {
-  const user = await currentUser();
-  if (!user) redirect("/login?next=/studio");
-  const [games, starters] = [await listGames(user), listStarters()];
+// Create: describe a new game, pick up one of yours, or start from a starter.
+// Open to everyone: describing a game signs you in as a guest.
+export default async function Create() {
+  const user = await currentUser().catch(() => null);
+  const games = user ? await listGames(user) : [];
+  const starters = listStarters();
 
   return (
-    <main className="picker">
-      <h1>Your games</h1>
-      <p>Open one to keep building with Frankie, or start something new below.</p>
-      {games.length === 0 ? (
-        <p className="muted">No games yet. Pick a starter to make your first one.</p>
-      ) : (
-        <div className="grid">
-          {games.map((g) => (
-            <div className="card" key={g.id}>
-              <div className="kind">{g.visibility === "public" ? "Public" : "Private"} · v{g.version}</div>
-              <h3>{g.title}</h3>
-              <p>Updated {g.updatedAt.toLocaleDateString()}</p>
-              <div className="actions">
-                <Link className="btn primary small" href={`/studio/${g.id}`}>Open</Link>
-                {g.visibility === "public" && <Link className="btn small" href={`/g/${g.id}`}>Play page</Link>}
+    <main className="wrap create-page">
+      <section className="create-hero">
+        <h1>Make a new game</h1>
+        <p className="muted">Say what it is. Frankie starts building right away, and you play it as it grows.</p>
+        <CreateBox signedIn={!!user} autoFocus={games.length === 0} />
+      </section>
+
+      {games.length > 0 && (
+        <section>
+          <h2>My games</h2>
+          <div className="tiles">
+            {games.map((g) => (
+              <GameTile
+                key={g.id}
+                href={`/studio/${g.id}`}
+                seed={g.id}
+                emoji={gameEmoji(g.starterId)}
+                title={g.title}
+                badge={g.visibility === "public" ? "Public" : "Private"}
+                by={`v${g.version} · ${g.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h2>Or start from a working game</h2>
+        <div className="starters">
+          {starters.map((s) => (
+            <div className="starter" key={s.id}>
+              <GameArt seed={s.id} emoji={s.emoji} />
+              <div>
+                <span className="kind">{s.kind}</span>
+                <b>{s.title}</b>
+                <p className="muted small">{s.blurb}</p>
               </div>
+              <RemixButton starter={s.id} label="Start here" />
             </div>
           ))}
         </div>
-      )}
-
-      <h2 style={{ marginTop: 36 }}>New game</h2>
-      <p>Every game starts from one that already works. Frankie turns it into whatever you describe.</p>
-      <div className="grid">
-        {starters.map((s) => (
-          <div className="card" key={s.id}>
-            <div className="emoji">{s.emoji}</div>
-            <div className="kind">{s.kind}</div>
-            <h3>{s.title}</h3>
-            <p>{s.blurb}</p>
-            <form className="actions" method="post" action="/studio/new">
-              <input type="hidden" name="starter" value={s.id} />
-              <button className="btn primary small" type="submit">Start here</button>
-            </form>
-          </div>
-        ))}
-      </div>
+      </section>
     </main>
   );
 }

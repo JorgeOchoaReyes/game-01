@@ -1,35 +1,36 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EMBER, TEMPLATES, findTemplate } from "@/lib/catalog";
-import { PlayTemplate } from "@/components/PlayTemplate";
+import { GamePage } from "@/components/GamePage";
 import { RemixButton } from "@/components/RemixButton";
 
 export function generateStaticParams() {
   return [{ id: EMBER.id }, ...TEMPLATES.map((t) => ({ id: t.id }))];
 }
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return { title: `${(findTemplate(id) ?? EMBER).title} · Polly` };
+}
+
+// The starters and Ember, Polly's own games.
 export default async function Play({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const template = findTemplate(id);
   if (id !== EMBER.id && !template) notFound();
-
-  const title = template ? template.title : EMBER.title;
+  const game = template ?? EMBER;
 
   return (
-    <main className="play">
-      <div className="toolbar">
-        <span className="title">{title}</span>
-        <Link className="btn small" href="/games">All games</Link>
-        <RemixButton starter={template ? template.id : EMBER.id} />
-      </div>
-      <div className="screen">
-        {template ? (
-          <PlayTemplate html={template.html} />
-        ) : (
-          // Ember is our own trusted build, served as static files with its vendor/ folder
-          <iframe title="Ember" src={EMBER.src} allow="autoplay; fullscreen" />
-        )}
-      </div>
-    </main>
+    <GamePage
+      seed={game.id}
+      emoji={game.emoji}
+      title={game.title}
+      by="Polly"
+      meta={game.kind}
+      blurb={game.blurb}
+      // Ember is our own trusted build, served as static files with its vendor/ folder
+      html={template?.html}
+      src={template ? undefined : EMBER.src}
+      actions={<RemixButton starter={game.id} label="Remix in studio" big />}
+    />
   );
 }
