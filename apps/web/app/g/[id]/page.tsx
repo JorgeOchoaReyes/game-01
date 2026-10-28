@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const game = await findGame((await params).id).catch(() => null);
   if (game?.visibility !== "public") return pageMeta({ title: "A private game", description: "A game made with Polly Studio.", path: `/g/${(await params).id}`, noindex: true });
   const by = await ownerName(game);
-  return pageMeta({ title: `${game.title} by ${by}: Play Free`, description: `Play ${game.title}, a browser game ${by} made with AI in Polly Studio. Free, no install. Like it? Remix it into your own game in one click.`, path: `/g/${game.id}` });
+  return pageMeta({ title: `${game.title} by ${by}: Play Free`, description: `Play ${game.title}, a browser game ${by} made with AI in Polly Studio. Free, no install. Like it? Remix it into your own game in one click.`, path: `/g/${game.id}`, image: `/g/${game.id}/opengraph-image` });
 }
 
 // A game's shareable page: anyone for public games, only the owner otherwise.

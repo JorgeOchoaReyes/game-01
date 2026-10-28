@@ -12,18 +12,18 @@ export const GUIDES = [
   { slug: "mobile-game-maker", title: "Make a Mobile Game with AI", blurb: "Portrait, touch-controlled games for phones." },
 ] as const;
 
-type PageMeta = { title: string; description: string; path: string; noindex?: boolean; absoluteTitle?: boolean };
+type PageMeta = { title: string; description: string; path: string; noindex?: boolean; absoluteTitle?: boolean; image?: string };
 
 // Everything one page needs: its own canonical and a full social card (Next
 // replaces openGraph wholesale in a child, so each page sends all of it).
-export function pageMeta({ title, description, path, noindex, absoluteTitle }: PageMeta) {
+export function pageMeta({ title, description, path, noindex, absoluteTitle, image = "/opengraph-image" }: PageMeta) {
   const full = absoluteTitle ? title : `${title} | ${SITE_NAME}`;
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description,
     alternates: { canonical: path },
-    openGraph: { type: "website" as const, siteName: SITE_NAME, locale: "en_US", url: path, title: full, description, images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Polly Studio: make games and videos with AI" }] },
-    twitter: { card: "summary_large_image" as const, title: full, description, images: ["/opengraph-image"] },
+    openGraph: { type: "website" as const, siteName: SITE_NAME, locale: "en_US", url: path, title: full, description, images: [{ url: image, width: 1200, height: 630, alt: full }] },
+    twitter: { card: "summary_large_image" as const, title: full, description, images: [image] },
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
   };
 }

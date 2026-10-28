@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const game = findTemplate(id) ?? EMBER;
   const film = game.kind === "Animation";
-  return pageMeta({ title: `${game.title}: Free ${film ? "Animated Short" : "Browser Game"}`, description: `${game.blurb} A ${game.kind.toLowerCase()} made with Polly Studio. Play it free, then remix it into your own game with AI.`.slice(0, 158), path: `/play/${game.id}` });
+  return pageMeta({ title: `${game.title}: Free ${film ? "Animated Short" : "Browser Game"}`, description: `${game.blurb} A ${game.kind.toLowerCase()} made with Polly Studio. Play it free, then remix it into your own game with AI.`.slice(0, 158), path: `/play/${game.id}`, image: `/play/${game.id}/opengraph-image` });
 }
 
 // The starters and Ember, Polly's own games.
