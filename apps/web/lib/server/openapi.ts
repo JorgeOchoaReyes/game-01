@@ -88,7 +88,7 @@ export function openApiDocument(origin: string) {
               format: { type: "string", enum: ["portrait", "landscape", "square"], description: "Video starters only: 9:16 short (portrait), 16:9 or square." },
             },
           }),
-          responses: { "201": ok("The new game", ref("GameWithOutline")), "400": err("Missing starterId/html, or html is not a game file."), "401": E401, "422": err("html has a JavaScript syntax error.") },
+          responses: { "201": ok("The new game", ref("GameWithOutline")), "400": err("Missing starterId/html, or html is not a game file."), "401": E401, "402": err("The free plan's one game or video is used. Tell the user they can keep editing it, or upgrade at /pricing; don't retry."), "422": err("html has a JavaScript syntax error.") },
         },
       },
       "/games/{gameId}": {

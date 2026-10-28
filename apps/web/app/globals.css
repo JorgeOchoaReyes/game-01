@@ -290,6 +290,24 @@ label.settings-row { flex-direction: column; align-items: stretch; }
 .pill { white-space: nowrap; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 550; border: 1px solid var(--line-2); color: var(--muted); }
 .pill.on { border-color: rgba(212, 175, 55, .4); background: var(--primary-soft); color: var(--primary); }
 
+/* ---- pricing -------------------------------------------------------------------- */
+.pricing { padding-top: 56px; padding-bottom: 40px; }
+.pricing-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 36px; }
+.pricing-head h1 { margin: 4px 0 0; font-size: clamp(30px, 4.2vw, 44px); letter-spacing: -.035em; }
+.notice { margin-top: 8px; padding: 10px 16px; border-radius: var(--radius-sm); border: 1px solid rgba(212, 175, 55, .35); background: var(--primary-soft); font-size: 14px; }
+.notice.good { border-color: rgba(74, 222, 128, .35); background: rgba(74, 222, 128, .08); }
+.notice a { color: var(--primary); }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; max-width: 760px; margin: 0 auto; }
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; display: flex; flex-direction: column; gap: 14px; }
+.plan.pro { border-color: rgba(212, 175, 55, .45); box-shadow: 0 0 0 4px var(--primary-soft); }
+.plan h2 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.plan .price { margin: 0; }
+.plan .price b { font-size: 40px; font-weight: 600; letter-spacing: -.03em; }
+.plan .price span { color: var(--muted); }
+.plan ul { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
+.plan li { display: flex; gap: 9px; align-items: center; color: #d4d4d8; font-size: 14px; }
+.plan li .icon { color: var(--primary); }
+
 /* ---- phones -------------------------------------------------------------------------- */
 @media (max-width: 860px) {
   .topbar { gap: 8px; padding: 0 12px; }
@@ -313,3 +331,4 @@ label.settings-row { flex-direction: column; align-items: stretch; }
 @media (prefers-reduced-motion: reduce) {
   .mascot svg, .btn.rec:disabled, .building::after { animation: none; }
 }
+.settings .card + .card { margin-top: 16px; }

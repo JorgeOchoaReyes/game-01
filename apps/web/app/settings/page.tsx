@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/server/session";
 import { VoiceSettings } from "@/components/VoiceSettings";
+import { PlanCard } from "@/components/PlanButtons";
 import { PollyDog } from "@/components/PollyDog";
 
 export const metadata = { title: "Settings · Polly Studio" };
@@ -18,6 +19,7 @@ export default async function Settings() {
           <p className="muted">{user.name}{user.email ? ` · ${user.email}` : ""}</p>
         </div>
       </div>
+      <PlanCard />
       <VoiceSettings />
     </main>
   );

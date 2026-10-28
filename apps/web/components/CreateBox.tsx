@@ -126,6 +126,11 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
         body: JSON.stringify(mode === "video" ? { starterId: "blank-film", format, title: what.slice(0, 80) } : { starterId: pickStarter(what, device) }),
       });
       const body = await res.json().catch(() => null);
+      // the free plan's one game or video is used: show the plans
+      if (res.status === 402) {
+        window.location.href = "/pricing?limit=1";
+        return;
+      }
       if (!res.ok) throw new Error(body?.error?.message || "Couldn't make it.");
       window.location.href = `/studio/${body.id}?ask=${encodeURIComponent(firstMessage(mode, what, format, device))}`;
     } catch (err) {

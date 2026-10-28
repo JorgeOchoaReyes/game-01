@@ -20,14 +20,17 @@ function useEmulators(): boolean {
 const shared = globalThis as unknown as { __pollyFirebase?: App };
 
 function app(): App {
+  // set every time: `next dev` resets process.env when .env files change
+  if (useEmulators()) {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ||= "127.0.0.1:9099";
+    process.env.FIRESTORE_EMULATOR_HOST ||= "127.0.0.1:8080";
+  }
   if (shared.__pollyFirebase) return shared.__pollyFirebase;
   const existing = getApps().find((a) => a.name === "polly");
   if (existing) return (shared.__pollyFirebase = existing);
 
   if (useEmulators()) {
-    // firebase-admin reads these itself; set the defaults the emulators use
-    process.env.FIREBASE_AUTH_EMULATOR_HOST ||= "127.0.0.1:9099";
-    process.env.FIRESTORE_EMULATOR_HOST ||= "127.0.0.1:8080";
+    // firebase-admin reads the emulator hosts set above
     const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || DEMO_PROJECT_ID;
     return (shared.__pollyFirebase = initializeApp({ projectId }, "polly"));
   }

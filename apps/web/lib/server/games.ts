@@ -5,6 +5,7 @@ import { newId } from "./auth";
 import { badRequest, notFound, HttpError } from "./http";
 import { applyEdits, checkGame, codeSummary } from "./code";
 import { touchStreak } from "./streaks";
+import { assertCanCreate } from "./billing";
 
 export const MAX_HTML_BYTES = 512 * 1024;
 export const MAX_TITLE = 80;
@@ -43,6 +44,7 @@ export function titleFromHtml(html: string): string | undefined {
 
 export async function createGame(owner: User, input: { title?: unknown; html: unknown; starterId?: string | null }): Promise<Game> {
   if (owner.anonymous) throw new HttpError(403, "account_required", "Make an account to start a new game. Your guest games come with you.");
+  await assertCanCreate(owner);
   const html = cleanHtml(input.html);
   const title = cleanTitle(input.title, titleFromHtml(html) || "Untitled game");
   const now = new Date();
