@@ -5,6 +5,7 @@ import { Icon } from "./Icon";
 
 export type CreateMode = "game" | "video";
 type Format = "portrait" | "landscape" | "square";
+export type Device = "desktop" | "mobile";
 
 // Starting ideas, specific enough that Frankie can build something good from
 // the first message. Four are shown, shuffled after the page loads.
@@ -45,6 +46,12 @@ const FORMATS: { id: Format; label: string; hint: string }[] = [
 ];
 const FORMAT_WORDS: Record<Format, string> = { portrait: "9:16 vertical short", landscape: "16:9 landscape video", square: "1:1 square video" };
 
+// Games are built for one kind of device for now (one game for both is later).
+const DEVICES: { id: Device; label: string; hint: string; icon: "monitor" | "phone" }[] = [
+  { id: "desktop", label: "Desktop", hint: "Keyboard and mouse, landscape", icon: "monitor" },
+  { id: "mobile", label: "Mobile", hint: "Touch controls, portrait", icon: "phone" },
+];
+
 function shuffled<T>(list: readonly T[]): T[] {
   const a = list.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -54,10 +61,11 @@ function shuffled<T>(list: readonly T[]): T[] {
   return a;
 }
 
-// The starter closest to the idea; Frankie turns it into the rest. Desktop
-// action is the default; portrait only when the idea asks for a phone game.
-function pickStarter(idea: string): string {
+// The starter closest to the idea; Frankie turns it into the rest. A mobile
+// game starts from the portrait touch starter unless it is online.
+function pickStarter(idea: string, device: Device): string {
   if (/\b(online|multiplayer|with friends|co-?op|pvp|capture[- ]the[- ]flag)\b/i.test(idea)) return "coin-rush-multiplayer";
+  if (device === "mobile") return "star-catcher";
   if (/\b(3d|first[- ]person|third[- ]person|campfire|forest)\b/i.test(idea)) return "campfire-3d";
   if (/\b(phone|mobile|portrait|vertical|tap)\b/i.test(idea)) return "star-catcher";
   return "slime-arena";
@@ -66,8 +74,12 @@ function pickStarter(idea: string): string {
 // What Frankie is asked first. A video starts from the blank film, and Frankie
 // builds it in small saves (title, helpers, then one scene each) at the file's
 // markers, so the preview fills in scene by scene and one bad edit costs one step.
-function firstMessage(mode: CreateMode, idea: string, format: Format): string {
-  if (mode === "game") return idea;
+function firstMessage(mode: CreateMode, idea: string, format: Format, device: Device): string {
+  if (mode === "game" && device === "desktop") return idea;
+  if (mode === "game") {
+    return `${idea}\n\nMake it a mobile game: portrait (Kit.canvas 540 by 960), played by touch only: drag to move (Kit.input.axis), ` +
+      `tap for actions (Kit.input.tap), big on-screen buttons with data-kit-ui, and nothing that needs a keyboard or mouse.`;
+  }
   return `Make a ${FORMAT_WORDS[format]} about: ${idea}. The open video is a blank film built in steps; read its top comment and follow it. ` +
     `Plan 6 to 8 scenes (one short punchy caption each), then save one step per editGame call: first the title, overlay title and CFG.plannedScenes, ` +
     `then any shared drawing helpers at // @helpers, then each scene at // @next-scene, in order, with every visual drawn on the canvas and a sound in enter(). ` +
@@ -77,15 +89,17 @@ function firstMessage(mode: CreateMode, idea: string, format: Format): string {
 // "What do you want to make?" -> a new game or video open in the studio with
 // Frankie already working on it. Making things needs an account: someone signed
 // out goes to sign-up with the idea, and comes back to /studio to start it.
-export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = "game", startFormat = "portrait" }: {
+export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = "game", startFormat = "portrait", startDevice = "desktop" }: {
   signedIn: boolean;
   autoFocus?: boolean;
   startWith?: string;
   startMode?: CreateMode;
   startFormat?: Format;
+  startDevice?: Device;
 }) {
   const [mode, setMode] = useState<CreateMode>(startMode);
   const [format, setFormat] = useState<Format>(startFormat);
+  const [device, setDevice] = useState<Device>(startDevice);
   const [idea, setIdea] = useState(startWith ?? "");
   const started = useRef(false);
   const pool = mode === "video" ? VIDEO_IDEAS : GAME_IDEAS;
@@ -99,7 +113,7 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
     const what = text.trim();
     if (!what || busy) return;
     if (!signedIn) {
-      const back = `/studio?idea=${encodeURIComponent(what)}&mode=${mode}${mode === "video" ? `&format=${format}` : ""}`;
+      const back = `/studio?idea=${encodeURIComponent(what)}&mode=${mode}${mode === "video" ? `&format=${format}` : `&device=${device}`}`;
       window.location.href = `/signup?next=${encodeURIComponent(back)}`;
       return;
     }
@@ -109,11 +123,11 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
       const res = await fetch("/api/v1/games", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(mode === "video" ? { starterId: "blank-film", format, title: what.slice(0, 80) } : { starterId: pickStarter(what) }),
+        body: JSON.stringify(mode === "video" ? { starterId: "blank-film", format, title: what.slice(0, 80) } : { starterId: pickStarter(what, device) }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message || "Couldn't make it.");
-      window.location.href = `/studio/${body.id}?ask=${encodeURIComponent(firstMessage(mode, what, format))}`;
+      window.location.href = `/studio/${body.id}?ask=${encodeURIComponent(firstMessage(mode, what, format, device))}`;
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -167,6 +181,16 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
           {!busy && <Icon name="arrow" />}
         </button>
       </form>
+      {!video && (
+        <div className="formats" role="radiogroup" aria-label="Device">
+          {DEVICES.map((d) => (
+            <button key={d.id} type="button" role="radio" aria-checked={device === d.id} className={`format${device === d.id ? " on" : ""}`} onClick={() => setDevice(d.id)} disabled={busy} title={d.hint}>
+              <Icon name={d.icon} size={15} />
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
       {video && (
         <div className="formats" role="radiogroup" aria-label="Video format">
           {FORMATS.map((f) => (

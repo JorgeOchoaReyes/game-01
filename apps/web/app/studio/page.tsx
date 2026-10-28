@@ -11,11 +11,12 @@ export const dynamic = "force-dynamic";
 
 // Create: describe a new game, pick up one of yours, or start from a starter.
 // Open to everyone to look at; making a game asks for an account first.
-export default async function Create({ searchParams }: { searchParams: Promise<{ idea?: string; mode?: string; format?: string }> }) {
+export default async function Create({ searchParams }: { searchParams: Promise<{ idea?: string; mode?: string; format?: string; device?: string }> }) {
   const params = await searchParams;
   const idea = params.idea?.trim().slice(0, 500) || undefined;
   const mode = params.mode === "video" ? "video" : "game";
   const format = params.format === "landscape" || params.format === "square" ? params.format : "portrait";
+  const device = params.device === "mobile" ? "mobile" : "desktop";
   const user = await currentUser().catch(() => null);
   const games = user ? await listGames(user) : [];
   // the browsable starters: not the blank film new videos start from
@@ -27,7 +28,7 @@ export default async function Create({ searchParams }: { searchParams: Promise<{
         <span className="eyebrow">New project</span>
         <h1>What do you want to make?</h1>
         <p className="muted">Describe a game or a video. Frankie starts building right away, and the preview updates as it goes.</p>
-        <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} startMode={mode} startFormat={format} />
+        <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} startMode={mode} startFormat={format} startDevice={device} />
       </section>
 
       {games.length > 0 && (
