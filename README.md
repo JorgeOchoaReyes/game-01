@@ -108,6 +108,72 @@ docs/
   site the studio is on, with that site's cookie, so it builds *as the user*, locally or in
   production. Setup: [docs/FRANKIE.md](docs/FRANKIE.md).
 
+### Billing (Stripe)
+
+- **Plans.** Free: 1 game or video per account (editing it stays free). **Polly Studio Pro**:
+  $10/month, unlimited. Every new game or video (starter, remix, Frankie's `createGame`)
+  checks the plan in `lib/server/billing.ts`; over the limit the API answers
+  `402 payment_required` and the site sends people to `/pricing`.
+- **Off until configured.** Without `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID` billing is off
+  and nobody is capped, so a deploy never locks anyone out before Stripe is set up.
+- **Flow.** `/pricing` → `POST /api/billing/checkout` (Stripe Checkout, subscription mode) →
+  back to `/pricing?checkout=<session>`, which saves the subscription straight away.
+  `POST /api/billing/webhook` keeps it current afterwards (renewals, cancellations, failed
+  payments). `POST /api/billing/portal` opens Stripe's customer portal from Settings.
+  `GET /api/me/plan` returns the plan.
+- **Data.** `users/{uid}.billing`: Stripe customer and subscription ids, status, renewal
+  date, `cancelAtPeriodEnd`, and `comp` (Pro given by an admin, no subscription).
+
+#### Setting up Stripe
+
+1. **Make the product and price** (safe to run again; it finds them by lookup key
+   `polly_pro_monthly`). With `--webhook` it also registers the webhook and prints its
+   signing secret once:
+
+   ```bash
+   cd apps/web
+   STRIPE_SECRET_KEY=sk_live_... node scripts/stripe-setup.mjs --webhook https://www.pollystudio.app/api/billing/webhook
+   # prints STRIPE_PRICE_ID=price_... and STRIPE_WEBHOOK_SECRET=whsec_...
+   ```
+
+   Point the webhook at the domain the site is *served* from (`www`): Stripe doesn't follow
+   redirects for webhooks. The endpoint listens for `checkout.session.completed` and
+   `customer.subscription.created`, `.updated` and `.deleted`.
+2. **Set the variables** in Vercel (Production; mark the secrets Sensitive), then redeploy:
+   `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, and make sure
+   `POLLY_PUBLIC_URL` is the live origin, since Checkout returns people there.
+3. **In the Stripe dashboard:** turn on the customer portal (Settings → Billing → Customer
+   portal), and check the public business name and support email, which Checkout and
+   receipts show.
+4. **Check it:** open `/pricing` signed in, subscribe, and confirm Settings shows Pro. In
+   Stripe → Webhooks the endpoint should show 200s.
+
+For local development use a test key (`sk_test_...`) in `apps/web/.env.local`, run the
+same script without `--webhook` for a test price, and set any `STRIPE_WEBHOOK_SECRET`; the
+return from Checkout saves the subscription without the webhook. To try the webhook
+locally, forward events with the Stripe CLI (`stripe listen --forward-to
+localhost:3100/api/billing/webhook`) and use the secret it prints. Test card: `4242 4242
+4242 4242`, any future date and CVC.
+
+### Admins
+
+An admin has the Firebase custom claim `admin: true`. They have no plan limit, can open and
+edit anyone's game (in the studio, through the API, and through Frankie acting for them),
+and get `/admin`: headline numbers, a live activity feed, recent people and games, and a
+page per person (`/admin/users/<uid>`) with their plan, games and history, where they can
+give or take back free Pro. Activity is logged to `events` (sign-ups, games started, saves
+and their notes, publishing, restores, plays, voiceovers, checkout and subscription changes),
+marked "via frankie" when it came through Frankie.
+
+```bash
+cd apps/web
+node scripts/set-admin.mjs you@example.com                 # local emulator
+GOOGLE_CLOUD_PROJECT=polly-7140d node scripts/set-admin.mjs you@example.com   # production, after `gcloud auth application-default login`
+node scripts/set-admin.mjs you@example.com --remove
+```
+
+The claim reaches the site at the next sign-in: log out and back in.
+
 ### Playing and sharing
 
 - `/g/<id>` is a game or video's page: cover art, a big ▶ Play, **■ Stop playing**, full
@@ -173,6 +239,10 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:909
 | `NEXT_PUBLIC_FRANKIE_PUBLISHABLE_KEY` | the Frankie workspace key; without it the studio shows a setup note instead of the chat |
 | `NEXT_PUBLIC_FRANKIE_URL` | only when self-hosting Frankie |
 | `NEXT_PUBLIC_RELAY_URL` | relay address for previews and downloads (default `ws://localhost:8787`) |
+| `STRIPE_SECRET_KEY` | Stripe secret key (`sk_live_…` in production, `sk_test_…` locally); unset means billing is off |
+| `STRIPE_PRICE_ID` | the Pro monthly price, printed by `scripts/stripe-setup.mjs` |
+| `STRIPE_WEBHOOK_SECRET` | the webhook's signing secret (`whsec_…`) |
+| `NEXT_PUBLIC_SITE_URL` | canonical origin for SEO tags, the sitemap and social cards (default `https://www.pollystudio.app`) |
 
 The relay reads `PORT` and `MAX_ROOM`.
 
@@ -183,8 +253,10 @@ The relay reads `PORT` and `MAX_ROOM`.
   workspace packages through Turbo before `next build`. Set the variables above for
   Production and Preview, and redeploy after changing them.
 - **Firebase setup** for a new project: enable Email/Password and Google sign-in (leave
-  Anonymous off), create a Firestore database, add the site's domain to Auth's authorized
-  domains, and create a service account key for the `FIREBASE_*` variables.
+  Anonymous off), create a Firestore database, add the site's domains (`pollystudio.app`
+  and `www.pollystudio.app`) to Auth's authorized domains, and create a service account key
+  for the `FIREBASE_*` variables.
+- **Stripe:** see [Setting up Stripe](#setting-up-stripe).
 - Firestore rules and indexes live in `apps/web/firestore.rules` and
   `firestore.indexes.json`. `.github/workflows/firestore.yml` deploys them when they change,
   without a stored key: GitHub's OIDC token is exchanged for the `github-deploy` service
@@ -196,7 +268,8 @@ The relay reads `PORT` and `MAX_ROOM`.
 
 | Piece | Where |
 | --- | --- |
-| Site | Vercel project `game-01` (team jorgeochoareyes-projects), https://game-01-eta.vercel.app |
+| Site | Vercel project `game-01` (team jorgeochoareyes-projects), https://www.pollystudio.app (the bare domain redirects to www; https://game-01-eta.vercel.app still serves) |
+| Billing | Stripe: product Polly Studio Pro, $10/month, lookup key `polly_pro_monthly` |
 | Firebase | project `polly-7140d`: Auth (email, Google) and Firestore in `nam5` |
 | Frankie | workspace `ws-402c89bc689e`, OpenAPI from `/api/v1/openapi.json`, 11 of 12 actions allowed (not delete), localhost allowed |
 | CI | GitHub Actions: `ci.yml` on every push, `firestore.yml` for rules and indexes |
