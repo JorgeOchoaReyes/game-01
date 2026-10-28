@@ -1,6 +1,6 @@
 // Where Polly Studio lives, for canonical URLs, the sitemap and social cards.
 // Set NEXT_PUBLIC_SITE_URL for a preview or another domain.
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://pollystudio.app").replace(/\/$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.pollystudio.app").replace(/\/$/, "");
 export const SITE_NAME = "Polly Studio";
 export const SITE_DESCRIPTION =
   "Describe a game or a video and Frankie, Polly Studio's AI, builds it while you watch. Play it in your browser, share a link, or export an MP4. Free to start.";
