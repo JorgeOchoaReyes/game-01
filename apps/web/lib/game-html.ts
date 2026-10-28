@@ -74,3 +74,13 @@ export function withFilmFormat(html: string, format: FilmFormat): string | null 
   const re = /(\bformat\s*:\s*['"])(portrait|landscape|square)(['"])/;
   return re.test(html) ? html.replace(re, `$1${format}$3`) : null;
 }
+
+// How far a film built in steps (from the blank film) has got: the scenes it
+// plans (CFG.plannedScenes) and the scenes written so far (one caption each).
+// null for any other file.
+export function filmProgress(html: string): { planned: number; written: number } | null {
+  if (!/\/\/ @next-scene/.test(html)) return null;
+  const planned = Number(html.match(/\bplannedScenes\s*:\s*(\d+)/)?.[1] ?? 0);
+  const written = html.match(/\bcaption\s*:\s*['"]/g)?.length ?? 0;
+  return { planned, written };
+}

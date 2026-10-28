@@ -4,13 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { FrankieInline, FrankieProvider, useFrankieChat, type ToolActivity } from "@frankieai/react";
 import "@frankieai/react/styles.css";
 import { GameFrame, saveFile } from "./GameFrame";
-import { FILM_FORMATS, filmFormat, isFilm, isPortrait, usesNet, withFilmFormat, type FilmFormat } from "@/lib/game-html";
+import { FILM_FORMATS, filmFormat, filmProgress, isFilm, isPortrait, usesNet, withFilmFormat, type FilmFormat } from "@/lib/game-html";
 
 type StudioGame = { id: string; title: string; version: number; visibility: "private" | "public"; html: string };
 type Version = { version: number; title: string; note: string | null; createdAt: string };
 type FrankieSettings = { publishableKey: string; baseUrl?: string };
 
 const POLL_MS = 2500;
+// how many times in a row the studio asks Frankie to carry on with a film
+const MAX_CONTINUES = 8;
 
 // Frankie (embedded through @frankieai/react) edits the game through Polly's
 // API as the signed-in user. The studio polls the game and reloads the preview
@@ -35,6 +37,8 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
   const film = isFilm(game.html);
   const etag = useRef<string | null>(null);
   const current = useRef(initial);
+  // set when the person presses the chat's Stop, so a stopped film build stays stopped
+  const stopped = useRef(false);
 
   const applyGame = useCallback((next: StudioGame, announce: boolean) => {
     if (next.id !== current.current.id) {
@@ -245,7 +249,8 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
         <section className="chat">
           <AutoAsk />
           <WatchTools gameId={game.id} onNewGame={openGame} onSaved={refresh} />
-          <div className="chat-wrap">
+          <KeepBuildingFilm latest={() => current.current} refresh={() => refresh(false)} stopped={stopped} />
+          <div className="chat-wrap" onClickCapture={(e) => { if ((e.target as Element).closest('button[aria-label="Stop"]')) stopped.current = true; }}>
             <FrankieInline placeholder="Tell Frankie what to build or change…" />
           </div>
         </section>
@@ -338,6 +343,48 @@ function WatchTools({ gameId, onNewGame, onSaved }: { gameId: string; onNewGame:
       else if (tool.status === "done" && tool.call && tool.call.request.method.toUpperCase() !== "GET" && tool.call.request.url.includes(`/games/${gameId}`)) onSaved();
     }
   }, [messages, restoring, gameId, onNewGame, onSaved]);
+  return null;
+}
+
+// A turn has about two minutes, and a film built in steps can need more. When
+// a turn ends with scenes still missing (fewer than CFG.plannedScenes), ask for
+// the next one: always once, then only while each turn saves something, so a
+// stuck build stops instead of looping. Pressing Stop ends it too.
+function KeepBuildingFilm({ latest, refresh, stopped }: { latest: () => StudioGame; refresh: () => Promise<void>; stopped: { current: boolean } }) {
+  const { busy, send } = useFrankieChat();
+  const turn = useRef<{ version: number } | null>(null);
+  const asked = useRef(0);
+  // the latest of these without re-running the effect (which would cancel the check)
+  const live = useRef({ latest, refresh, send });
+  live.current = { latest, refresh, send };
+  useEffect(() => {
+    const { latest, refresh, send } = live.current;
+    if (busy) {
+      if (!turn.current) stopped.current = false;
+      turn.current ??= { version: latest().version };
+      return;
+    }
+    const started = turn.current;
+    if (!started) return;
+    turn.current = null;
+    if (stopped.current) { asked.current = 0; return; }
+    let cancelled = false;
+    // the last save may not have reached the stage yet
+    const t = setTimeout(async () => {
+      await refresh();
+      if (cancelled) return;
+      const game = live.current.latest();
+      const progress = filmProgress(game.html);
+      if (!progress || (progress.planned > 0 && progress.written >= progress.planned)) { asked.current = 0; return; }
+      const progressed = game.version > started.version;
+      if (asked.current >= MAX_CONTINUES || (asked.current > 0 && !progressed)) return;
+      asked.current++;
+      void live.current.send(progress.planned
+        ? `Keep going: write scene ${progress.written + 1} of ${progress.planned} at // @next-scene, one editGame save per scene.`
+        : "Keep going: save the title and CFG.plannedScenes first, then write the scenes one editGame save each.");
+    }, 1500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [busy]);
   return null;
 }
 

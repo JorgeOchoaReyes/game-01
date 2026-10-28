@@ -5,6 +5,7 @@ import { TEMPLATES } from "@polly/templates";
 import { applyEdits, checkGame, codeSummary, readRange, search, unknownKitCalls } from "@/lib/server/code";
 import { HttpError } from "@/lib/server/http";
 import { filmLines } from "@/lib/server/voice";
+import { filmProgress } from "@/lib/game-html";
 
 const ember = fs.readFileSync(path.join(__dirname, "..", "..", "..", "games", "ember", "index.html"), "utf8");
 const star = TEMPLATES.find((t) => t.id === "star-catcher")!.html;
@@ -127,10 +128,17 @@ describe("the blank film", () => {
       html = applyEdits(html, edits).html;
       expect(checkGame(html).warnings).toEqual([]);
     };
-    step([{ find: "<title>New Video</title>", replace: "<title>The Death Star Explodes</title>" }, { find: "title: 'New video',", replace: "title: 'The Death Star explodes'," }]);
+    expect(filmProgress(html)).toEqual({ planned: 0, written: 0 });
+    step([
+      { find: "<title>New Video</title>", replace: "<title>The Death Star Explodes</title>" },
+      { find: "title: 'New video',", replace: "title: 'The Death Star explodes'," },
+      { find: "plannedScenes: 0,", replace: "plannedScenes: 2," },
+    ]);
     step([{ find: "// @helpers", replace: "function boom(t) { ctx.fillStyle = CFG.gold; ctx.fillRect(0, 0, t * U, U); }\n// @helpers" }]);
     step([{ find: "  // @next-scene", replace: scene("A *moon-sized* station.") }]);
+    expect(filmProgress(html)).toEqual({ planned: 2, written: 1 });
     step([{ find: "  // @next-scene", replace: scene("One shot... *boom.*") }]);
+    expect(filmProgress(html)).toEqual({ planned: 2, written: 2 });
     expect(html.match(/@next-scene/g)).toHaveLength(1);
     expect(html.match(/@helpers/g)).toHaveLength(1);
   });

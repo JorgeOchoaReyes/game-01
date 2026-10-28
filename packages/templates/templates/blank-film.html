@@ -22,13 +22,16 @@
 /*
  * A BLANK POLLY STUDIO VIDEO, built one step at a time. Each step is one small
  * editGame save, so the preview grows scene by scene and a mistake costs one step:
- *   1. the title: <title> and the overlay title at the bottom
+ *   1. the plan: <title>, the overlay title at the bottom, and CFG.plannedScenes
+ *      (how many scenes the film will have; the studio counts scenes against it)
  *   2. shared drawing helpers (optional): insert them at the marker comment
  *      under "Shared drawing helpers", and put the marker back after them
  *   3. each scene, in order: insert it at the marker comment inside `scenes`,
  *      ending with a comma, and put the marker back after it
  * Each marker is in the file exactly once (only there, never in a comment), so
  * an edit whose find is that one marker line always matches. Keep them.
+ * A turn has about two minutes: save each step as soon as it is written. When a
+ * turn ends with scenes missing, the studio asks for the next one.
  *
  * Each scene: { dur, caption, enter(), draw(ctx, t, p) }. t = seconds into the
  * scene, p = 0..1. Draw the full frame every time (background first), from t/p
@@ -42,6 +45,7 @@
 // ---------------------------------------------------------------------------
 var CFG = {
   format: 'portrait',
+  plannedScenes: 0, // set in step 1
   bg: '#0b0b0f', gold: '#d4af37', ink: '#ffffff'
 };
 

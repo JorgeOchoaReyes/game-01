@@ -68,9 +68,9 @@ function pickStarter(idea: string): string {
 function firstMessage(mode: CreateMode, idea: string, format: Format): string {
   if (mode === "game") return idea;
   return `Make a ${FORMAT_WORDS[format]} about: ${idea}. The open video is a blank film built in steps; read its top comment and follow it. ` +
-    `Plan 6 to 8 scenes first (one short punchy caption each), then save one step per editGame call: the title, any shared drawing helpers at // @helpers, ` +
-    `then each scene at // @next-scene, in order, with every visual drawn on the canvas and a sound in enter(). ` +
-    `Keep CFG.format as it is. If a save is refused, fix that step and carry on; keep going until every scene is in.`;
+    `Plan 6 to 8 scenes (one short punchy caption each), then save one step per editGame call: first the title, overlay title and CFG.plannedScenes, ` +
+    `then any shared drawing helpers at // @helpers, then each scene at // @next-scene, in order, with every visual drawn on the canvas and a sound in enter(). ` +
+    `Keep CFG.format as it is. Save each step as soon as it is written: a turn has about two minutes, and if it ends early I will ask you to keep going.`;
 }
 
 // "What do you want to make?" -> a new game or video open in the studio with
