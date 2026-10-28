@@ -56,7 +56,7 @@ export async function createSession(idToken: string): Promise<{ cookie: string; 
   return { cookie, claims };
 }
 
-export type Identity = { uid: string; admin: boolean; claims?: DecodedIdToken };
+export type Identity = { uid: string; admin: boolean; agent?: boolean; claims?: DecodedIdToken };
 
 // Who a token speaks for, or null if it is not one we accept.
 export async function verifyToken(token: string): Promise<Identity | null> {
@@ -71,7 +71,7 @@ export async function verifyToken(token: string): Promise<Identity | null> {
       const key = frankieSecret();
       if (!key) return null;
       const { payload } = await jwtVerify(token, key, { issuer: "polly", audience: "frankie", algorithms: ["HS256"] });
-      return typeof payload.sub === "string" && payload.sub ? { uid: payload.sub, admin: payload.admin === true } : null;
+      return typeof payload.sub === "string" && payload.sub ? { uid: payload.sub, admin: payload.admin === true, agent: true } : null;
     }
     if (typeof iss === "string" && iss.startsWith("https://session.firebase.google.com/")) {
       const claims = await adminAuth().verifySessionCookie(token);
@@ -108,7 +108,7 @@ export async function userFromToken(token: string | null | undefined): Promise<U
   const who = await verifyToken(token);
   if (!who) return null;
   const user = (await getUser(who.uid)) ?? (who.claims ? await ensureUser(who.claims) : null);
-  return user && { ...user, admin: who.admin };
+  return user && { ...user, admin: who.admin, ...(who.agent ? { agent: true } : {}) };
 }
 
 export function getRequestUser(req: Request): Promise<User | null> {

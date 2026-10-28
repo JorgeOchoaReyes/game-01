@@ -1,6 +1,7 @@
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { adminAuth, firestore } from "./firebase";
 import { gamesCol, toUser, usersCol, type User } from "./schema";
+import { logEvent } from "./activity";
 
 const MAX_NAME = 60;
 
@@ -31,11 +32,13 @@ export async function ensureUser(claims: DecodedIdToken, input: { name?: unknown
   const email = claims.email ? claims.email.toLowerCase() : null;
   const name = cleanName(input.name) ?? cleanName(claims.name) ?? (email ? email.split("@")[0] : "Guest");
   const tz = cleanTz(input.tz);
-  return firestore().runTransaction(async (tx) => {
+  let created: User | null = null;
+  const result = await firestore().runTransaction(async (tx) => {
     const existing = toUser(await tx.get(ref));
     if (!existing) {
       const user: User = { id: claims.uid, email, name, anonymous, tz, streak: null, createdAt: new Date(), admin: false };
       tx.set(ref, { email, name, anonymous, tz, createdAt: user.createdAt });
+      created = user;
       return user;
     }
     if (existing.anonymous && !anonymous) {
@@ -49,6 +52,10 @@ export async function ensureUser(claims: DecodedIdToken, input: { name?: unknown
     }
     return existing;
   });
+  // set inside the transaction, which TypeScript can't follow
+  const signedUp = created as User | null;
+  if (signedUp) await logEvent("signup", signedUp, { detail: signedUp.email ?? "guest" });
+  return result;
 }
 
 // A guest signed in to a different, real account: their games move over and

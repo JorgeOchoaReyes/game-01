@@ -22,6 +22,8 @@ export type User = {
   createdAt: Date;
   // the Firebase custom claim `admin: true` (scripts/set-admin.mjs); never stored here
   admin: boolean;
+  // true when this request came through Frankie (its token), for the activity log
+  agent?: boolean;
 };
 
 export type Game = {

@@ -6,6 +6,7 @@ import { badRequest, notFound, HttpError } from "./http";
 import { applyEdits, checkGame, codeSummary } from "./code";
 import { touchStreak } from "./streaks";
 import { assertCanCreate } from "./billing";
+import { logEvent } from "./activity";
 
 export const MAX_HTML_BYTES = 512 * 1024;
 export const MAX_TITLE = 80;
@@ -55,6 +56,7 @@ export async function createGame(owner: User, input: { title?: unknown; html: un
   batch.create(versionsCol(id).doc("1"), { version: 1, title, html, note: input.starterId ? `Started from ${input.starterId}` : "Created", createdAt: now });
   await batch.commit();
   await touchStreak(owner.id).catch(() => null);
+  await logEvent("game.create", owner, { ownerId: owner.id, gameId: id, title, detail: input.starterId ? `from ${input.starterId}` : null });
   return game;
 }
 
@@ -110,6 +112,7 @@ export async function recordPlay(id: string, viewer: User | null): Promise<void>
   const game = await findGame(id);
   if (!game || game.visibility !== "public" || game.ownerId === viewer?.id) return;
   await gamesCol().doc(id).update({ plays: FieldValue.increment(1) });
+  await logEvent("game.play", viewer, { ownerId: game.ownerId, gameId: id, title: game.title });
 }
 
 export type GameUpdate = { title?: unknown; html?: unknown; visibility?: unknown; note?: unknown; baseVersion?: unknown };
@@ -146,6 +149,12 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
     const game: Game = { ...current, title, visibility, html: html ?? current.html, version, updatedAt: new Date() };
     tx.update(ref, { title, visibility, html: game.html, version, updatedAt: game.updatedAt });
     if (newContent) tx.create(versionsCol(id).doc(String(version)), { version, title, html: game.html, note, createdAt: game.updatedAt });
+    return { game, before: current, newContent, note };
+  }).then(async ({ game, before, newContent, note }) => {
+    const about = { ownerId: game.ownerId, gameId: id, title: game.title };
+    if (newContent) await logEvent(note?.startsWith("Restored version") ? "game.restore" : "game.save", owner, { ...about, detail: `v${game.version}${note ? ` · ${note}` : ""}` });
+    if (game.visibility !== before.visibility) await logEvent(game.visibility === "public" ? "game.publish" : "game.unpublish", owner, about);
+    if (!newContent && game.title !== before.title) await logEvent("game.rename", owner, { ...about, detail: `from ${before.title}` });
     return game;
   });
   // building something counts toward the day's streak
@@ -169,9 +178,10 @@ export async function editGame(id: string, owner: User, input: { baseVersion?: u
 }
 
 export async function deleteGame(id: string, owner: User): Promise<void> {
-  await getOwnedGame(id, owner);
+  const game = await getOwnedGame(id, owner);
   // the game and its versions subcollection
   await firestore().recursiveDelete(gamesCol().doc(id));
+  await logEvent("game.delete", owner, { ownerId: game.ownerId, gameId: id, title: game.title });
 }
 
 export async function listVersions(id: string, owner: User) {

@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { gamesCol, usersCol, type User } from "./schema";
 import { HttpError } from "./http";
+import { logEvent } from "./activity";
 
 // Polly Studio Pro: $10 a month through Stripe. Everyone gets FREE_GAMES games
 // or videos (editing them stays free); making more needs Pro.
@@ -91,6 +92,7 @@ export async function checkoutUrl(user: User, origin: string): Promise<string> {
     success_url: `${origin}/pricing?checkout={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/pricing`,
   });
+  await logEvent("billing.checkout", user);
   return session.url!;
 }
 
@@ -119,7 +121,9 @@ export async function saveSubscription(sub: Stripe.Subscription): Promise<void> 
     currentPeriodEnd: end ? new Date(end * 1000) : null,
     cancelAtPeriodEnd: sub.cancel_at_period_end,
   };
+  const before = (await usersCol().doc(uid).get()).get("billing.status") ?? null;
   await usersCol().doc(uid).set({ billing }, { merge: true });
+  if (before !== billing.status) await logEvent("billing.subscription", uid, { detail: `${before ?? "none"} → ${billing.status}${billing.cancelAtPeriodEnd ? " (cancels at period end)" : ""}` });
 }
 
 // Back from Checkout: save the subscription now rather than wait for the webhook.
