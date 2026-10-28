@@ -2,8 +2,9 @@ import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/server/session";
 import { findGame } from "@/lib/server/games";
 import { StudioWorkspace } from "@/components/StudioWorkspace";
+import { pageMeta } from "@/lib/site";
 
-export const metadata = { title: "Studio · Polly Studio" };
+export const metadata = pageMeta({ title: "Studio", description: "Polly Studio", path: "/studio", noindex: true });
 export const dynamic = "force-dynamic";
 
 export default async function StudioGame({ params }: { params: Promise<{ id: string }> }) {

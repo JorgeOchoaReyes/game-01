@@ -3,8 +3,9 @@ import { currentUser } from "@/lib/server/session";
 import { VoiceSettings } from "@/components/VoiceSettings";
 import { PlanCard } from "@/components/PlanButtons";
 import { PollyDog } from "@/components/PollyDog";
+import { pageMeta } from "@/lib/site";
 
-export const metadata = { title: "Settings · Polly Studio" };
+export const metadata = pageMeta({ title: "Settings", description: "Polly Studio", path: "/settings", noindex: true });
 export const dynamic = "force-dynamic";
 
 export default async function Settings() {

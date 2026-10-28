@@ -5,8 +5,9 @@ import { EMBER, findTemplate, gameEmoji } from "@/lib/catalog";
 import { CreateBox } from "@/components/CreateBox";
 import { GameArt, GameTile } from "@/components/GameTile";
 import { RemixButton } from "@/components/RemixButton";
+import { pageMeta } from "@/lib/site";
 
-export const metadata = { title: "Create · Polly Studio" };
+export const metadata = pageMeta({ title: "Create a Game or Video", description: "Describe a game or a video and Frankie starts building it right away.", path: "/studio", noindex: true });
 export const dynamic = "force-dynamic";
 
 // Create: describe a new game, pick up one of yours, or start from a starter.

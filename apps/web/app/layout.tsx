@@ -6,6 +6,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { PollyDog } from "@/components/PollyDog";
 import { Icon } from "@/components/Icon";
 import { streakStatus } from "@/lib/server/streaks";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // Geist for the interface; the rounded Fredoka only for the Polly Studio wordmark
@@ -14,8 +15,12 @@ const mono = Geist_Mono({ subsets: ["latin"], display: "swap", variable: "--font
 const brand = Fredoka({ subsets: ["latin"], weight: ["600", "700"], display: "swap", variable: "--font-brand" });
 
 export const metadata: Metadata = {
-  title: "Polly Studio · make games and videos",
-  description: "Describe a game or a short video and watch it come to life as Frankie builds it with you. Play, share, remix, download.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: "Polly Studio: Make Games and Videos with AI", template: "%s | Polly Studio" },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

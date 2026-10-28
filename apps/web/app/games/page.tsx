@@ -3,8 +3,10 @@ import { EMBER, TEMPLATES, gameEmoji } from "@/lib/catalog";
 import { listPublicGames } from "@/lib/server/games";
 import { GameTile } from "@/components/GameTile";
 import { PollyDog } from "@/components/PollyDog";
+import { JsonLd } from "@/components/JsonLd";
+import { SITE_URL, pageMeta } from "@/lib/site";
 
-export const metadata = { title: "Discover · Polly Studio" };
+export const metadata = pageMeta({ title: "Discover Games and Videos Made with AI", description: "Play free browser games and watch short videos people made with Polly Studio's AI. Remix any public game into your own in one click.", path: "/games" });
 export const dynamic = "force-dynamic";
 
 export default async function Discover({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string }> }) {
@@ -16,8 +18,20 @@ export default async function Discover({ searchParams }: { searchParams: Promise
   const starters = [{ id: EMBER.id, title: EMBER.title, emoji: EMBER.emoji }, ...TEMPLATES].filter((t) => !q || t.title.toLowerCase().includes(q));
   const tab = (s: "new" | "popular") => `/games?sort=${s}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Games and videos made with Polly Studio",
+    url: `${SITE_URL}/games`,
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: all.slice(0, 30).map((g, i) => ({ "@type": "ListItem", position: i + 1, url: `${SITE_URL}/g/${g.id}`, name: g.title })),
+    },
+  };
+
   return (
     <main className="wrap discover">
+      <JsonLd data={ld} />
       <div className="discover-head">
         <h1>{q ? <>Results for &ldquo;{params.q}&rdquo;</> : "Discover games and videos"}</h1>
         <div className="tabs" role="tablist">

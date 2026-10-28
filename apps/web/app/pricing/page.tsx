@@ -3,12 +3,15 @@ import { currentUser } from "@/lib/server/session";
 import { FREE_GAMES, planFor } from "@/lib/server/billing";
 import { CheckoutReturn, UpgradeButton } from "@/components/PlanButtons";
 import { Icon } from "@/components/Icon";
+import { JsonLd } from "@/components/JsonLd";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
+import { pageMeta } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "Pricing",
-  description: "Make your first AI-built game or video free. Polly Studio Pro is $10 a month for unlimited games and videos, voiceovers and video export.",
-  alternates: { canonical: "/pricing" },
-};
+export const metadata: Metadata = pageMeta({
+  title: "Pricing: Free to Start, Pro for $10 a Month",
+  description: "Make your first AI-built game or video free, with every feature. Polly Studio Pro is $10 a month for unlimited games and videos. Cancel any time.",
+  path: "/pricing",
+});
 export const dynamic = "force-dynamic";
 
 const FREE = [`${FREE_GAMES} game or video`, "Build and edit it with Frankie", "Play, share and download it", "Record it as an MP4"];
@@ -19,8 +22,20 @@ export default async function Pricing({ searchParams }: { searchParams: Promise<
   const user = await currentUser().catch(() => null);
   const signedIn = !!user && !user.anonymous;
   const plan = signedIn ? await planFor(user).catch(() => null) : null;
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: `${SITE_NAME} Pro`,
+    description: "Unlimited AI-built games and videos in Polly Studio.",
+    brand: { "@type": "Brand", name: SITE_NAME },
+    offers: [
+      { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD", url: `${SITE_URL}/pricing` },
+      { "@type": "Offer", name: "Pro", price: "10", priceCurrency: "USD", url: `${SITE_URL}/pricing`, priceSpecification: { "@type": "UnitPriceSpecification", price: "10", priceCurrency: "USD", billingDuration: "P1M", referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" } } },
+    ],
+  };
   return (
     <main className="wrap pricing">
+      <JsonLd data={ld} />
       <section className="pricing-head">
         <span className="eyebrow">Pricing</span>
         <h1>Start free. Go Pro when you want more.</h1>

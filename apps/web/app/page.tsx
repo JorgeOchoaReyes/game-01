@@ -6,8 +6,41 @@ import { CreateBox } from "@/components/CreateBox";
 import { GameTile } from "@/components/GameTile";
 import { PollyDog } from "@/components/PollyDog";
 import { Icon } from "@/components/Icon";
+import { FaqList, JsonLd, faqLd, type Faq } from "@/components/JsonLd";
+import { FREE_GAMES } from "@/lib/server/billing";
+import { GUIDES, SITE_DESCRIPTION, SITE_NAME, SITE_URL, pageMeta } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = pageMeta({
+  title: "Polly Studio: Make Games and Videos with AI",
+  absoluteTitle: true,
+  description: "Describe a game or a short video and watch AI build it. Play in your browser, share a link, or export an MP4. Your first game is free.",
+  path: "/",
+});
+
+const FAQS: Faq[] = [
+  { q: "Can AI really make a whole game?", a: "Yes. Describe the game in a sentence and Frankie, Polly Studio's AI, writes a complete, playable browser game: movement, scoring, sound and a win or lose screen. You then ask for changes in plain words, and the preview reloads with each one." },
+  { q: "Do I need to know how to code?", a: "No. You talk to Frankie in plain language. If you do code, every game is one readable HTML file you can download and edit by hand." },
+  { q: "Can I make games for phones?", a: "Yes. Pick Mobile when you start and the game is built portrait with touch controls. Desktop games use keyboard and mouse." },
+  { q: "What kind of videos can it make?", a: "Animated explainer shorts in 9:16, 16:9 or square, with captions, sound and an optional voiceover, recorded to MP4 for YouTube Shorts, TikTok and Reels." },
+  { q: "Is Polly Studio free?", a: `Your first ${FREE_GAMES === 1 ? "game or video is" : `${FREE_GAMES} games or videos are`} free, with every feature. Polly Studio Pro is $10 a month for unlimited games and videos.` },
+];
+
+const SITE_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/icon.svg` },
+    { "@type": "WebSite", "@id": `${SITE_URL}/#site`, name: SITE_NAME, url: SITE_URL, publisher: { "@id": `${SITE_URL}/#org` }, potentialAction: { "@type": "SearchAction", target: `${SITE_URL}/games?q={query}`, "query-input": "required name=query" } },
+    {
+      "@type": "SoftwareApplication", name: SITE_NAME, url: SITE_URL, applicationCategory: "DesignApplication", operatingSystem: "Web browser", description: SITE_DESCRIPTION,
+      offers: [
+        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
+        { "@type": "Offer", name: "Polly Studio Pro", price: "10", priceCurrency: "USD", url: `${SITE_URL}/pricing` },
+      ],
+    },
+  ],
+};
 
 // Starters that are films rather than games.
 const VIDEO_KINDS = new Set(["Animation"]);
@@ -93,10 +126,27 @@ export default async function Home() {
         </section>
       </div>
 
+      <div className="wrap">
+        <section className="row guides-row">
+          <div className="row-head"><h2>Guides</h2></div>
+          <div className="guides">
+            {GUIDES.map((g) => (
+              <Link key={g.slug} href={`/${g.slug}`} className="guide-card"><b>{g.title}</b><span className="muted small">{g.blurb}</span><Icon name="arrow" size={14} /></Link>
+            ))}
+          </div>
+        </section>
+        <section className="row">
+          <div className="row-head"><h2>Questions</h2></div>
+          <FaqList faqs={FAQS} />
+        </section>
+      </div>
+      <JsonLd data={SITE_LD} />
+      <JsonLd data={faqLd(FAQS)} />
+
       <footer className="footer">
         <div className="footer-brand"><PollyDog size={28} /><span>Polly Studio</span></div>
         <span>Every game and video is one readable file you own.</span>
-        <nav><Link href="/games">Discover</Link><Link href="/studio">Create</Link><Link href="/practices">How it&apos;s built</Link></nav>
+        <nav><Link href="/ai-game-maker">AI game maker</Link><Link href="/ai-video-maker">AI video maker</Link><Link href="/games">Discover</Link><Link href="/pricing">Pricing</Link><Link href="/practices">How it&apos;s built</Link></nav>
       </footer>
     </main>
   );

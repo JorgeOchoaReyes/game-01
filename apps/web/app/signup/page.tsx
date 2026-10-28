@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 import { currentUser } from "@/lib/server/session";
 import { safeNext } from "@/lib/next-param";
+import { pageMeta } from "@/lib/site";
 
-export const metadata = { title: "Sign up · Polly Studio" };
+export const metadata = pageMeta({ title: "Sign up", description: "Make an account to build games and videos with AI. Your first one is free.", path: "/signup", noindex: true });
 
 export default async function Signup({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const next = safeNext((await searchParams).next);
