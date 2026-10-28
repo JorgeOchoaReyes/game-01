@@ -77,7 +77,7 @@ export function openApiDocument(origin: string) {
           tags: ["games"],
           summary: "Create a game",
           description:
-            "Creates a game or video for the user from a starter (starterId, preferred) or from a complete html file. Returns it with its outline; then change it with editGame. The user can open it at studioUrl.",
+            "Creates a game or video for the user from a starter (starterId, preferred) or from a complete html file. A new video starts from starterId blank-film. Returns it with its outline; then change it with editGame. The user can open it at studioUrl.",
           requestBody: body({
             type: "object",
             additionalProperties: false,
@@ -106,7 +106,7 @@ export function openApiDocument(origin: string) {
           tags: ["games"],
           summary: "Rename, publish, or replace the whole file",
           description:
-            "Changes title and/or visibility (public gives the game a shareable play page). html replaces the ENTIRE file: use it only for a brand-new game or full rewrite; for changes use editGame. A file with a JavaScript syntax error is refused.",
+            "Changes title and/or visibility (public gives the game a shareable play page). html replaces the ENTIRE file: use it only for a brand-new game or full rewrite, never for a video (build videos step by step with editGame); for changes use editGame. A file with a JavaScript syntax error is refused.",
           parameters: [gameId],
           requestBody: body({
             type: "object",
@@ -161,7 +161,7 @@ export function openApiDocument(origin: string) {
           tags: ["code"],
           summary: "Change a game with find/replace edits",
           description:
-            "Applies exact find/replace edits to the version you read, all or none, and saves a new version (the preview reloads). Each find must match exactly once: copy it from readGameCode without line numbers. A syntax error is refused. Check warnings in the result.",
+            "Applies exact find/replace edits to the version you read, all or none, and saves a new version (the preview reloads). Each find must match exactly once: copy it from readGameCode without line numbers. A syntax error is refused. Check warnings in the result. Videos are built one step per call: the title, then each scene at the file's // @next-scene marker.",
           parameters: [gameId],
           requestBody: body({
             type: "object",
