@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>New Video</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; user-select: none; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: linear-gradient(transparent, rgba(0,0,0,.7)); color: #fff; font: bold 14px system-ui, sans-serif; z-index: 2; opacity: 0; transition: opacity .2s; }
+  body:hover #bar { opacity: 1; }
+  #bar button { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  #seek { flex: 1; height: 6px; background: rgba(255,255,255,.25); border-radius: 3px; cursor: pointer; position: relative; }
+  #seek i { position: absolute; left: 0; top: 0; bottom: 0; background: #d4af37; border-radius: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bar" data-kit-ui><button id="pp">⏸</button><div id="seek"><i></i></div><span id="clock">0:00</span><button id="mute">🔊</button></div>
+<script src="vendor/game-kit.js"></script>
+<script>
+"use strict";
+/*
+ * A BLANK POLLY STUDIO VIDEO. Write the whole film for your topic: a new title,
+ * 6 to 8 scenes in `scenes`, and the overlay text at the bottom.
+ *
+ * Each scene: { dur, caption, enter(), draw(ctx, t, p) }. t = seconds into the
+ * scene, p = 0..1. Draw the full frame every time (background first), from t/p
+ * only, subject big and centred. Kit.film adds the captions and crossfades.
+ * Captions: one short spoken sentence each (the voiceover reads them); *star*
+ * the key words. CFG.format: 'portrait' (9:16), 'landscape' (16:9) or 'square'.
+ */
+
+// ---------------------------------------------------------------------------
+// Tuning: format and colours in one place
+// ---------------------------------------------------------------------------
+var CFG = {
+  format: 'portrait',
+  bg: '#0b0b0f', gold: '#d4af37', ink: '#ffffff'
+};
+
+var FORMATS = { portrait: [720, 1280], landscape: [1280, 720], square: [900, 900] };
+var size = FORMATS[CFG.format] || FORMATS.portrait;
+var view = Kit.canvas({ width: size[0], height: size[1] });
+var ctx = view.ctx;
+var W = size[0], H = size[1];
+var U = Math.min(W, H) / 720; // one unit at any format: draw sizes as n * U
+
+// a fixed pseudo-random number for index i, so every frame is repeatable
+function rnd(i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+function seg(p, a, b) { return Kit.clamp((p - a) / (b - a), 0, 1); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function pad(chord, vol) { chord.forEach(function (f, i) { Kit.audio.tone({ freq: f, dur: 3.2, type: 'triangle', vol: vol || 0.05, delay: i * 0.06 }); }); }
+function whoosh() { Kit.audio.noise({ dur: 0.45, cutoff: 900, vol: 0.12 }); }
+
+// ---------------------------------------------------------------------------
+// The scenes (replace this placeholder with the real film)
+// ---------------------------------------------------------------------------
+var scenes = [
+  { // placeholder while the film is being written
+    dur: 6, caption: 'Your video is *being written...*',
+    enter: function () { pad([196, 247, 294]); },
+    draw: function (ctx, t, p) {
+      ctx.fillStyle = CFG.bg; ctx.fillRect(0, 0, W, H);
+      for (var i = 0; i < 80; i++) {
+        ctx.globalAlpha = 0.25 + 0.5 * Math.abs(Math.sin(t * 1.5 + i));
+        ctx.fillStyle = CFG.ink; ctx.fillRect(rnd(i) * W, rnd(i + 99) * H, 2 * U, 2 * U);
+      }
+      ctx.globalAlpha = 1;
+      ctx.save(); ctx.translate(W / 2, H * 0.42); ctx.rotate(t * 0.8);
+      ctx.strokeStyle = CFG.gold; ctx.lineWidth = 10 * U;
+      ctx.beginPath(); ctx.arc(0, 0, 90 * U, 0, Math.PI * 2); ctx.stroke();
+      for (var k = 0; k < 6; k++) {
+        var a = k / 6 * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * 52 * U, Math.sin(a) * 52 * U, 18 * U, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+];
+
+// ---------------------------------------------------------------------------
+// Playback and controls
+// ---------------------------------------------------------------------------
+var film = Kit.film(scenes, { onEnd: function () { pp.textContent = '↻'; } });
+
+function render() {
+  film.render();
+  document.querySelector('#seek i').style.width = (film.time / film.duration * 100) + '%';
+  var s = Math.floor(film.time), d = Math.round(film.duration);
+  document.getElementById('clock').textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) + ' / ' + Math.floor(d / 60) + ':' + ('0' + (d % 60)).slice(-2);
+}
+
+var pp = document.getElementById('pp');
+pp.onclick = function () { pp.textContent = film.toggle() ? '⏸' : '▶'; };
+document.getElementById('seek').onclick = function (e) { var r = this.getBoundingClientRect(); film.seek((e.clientX - r.left) / r.width * film.duration); };
+var muteBtn = document.getElementById('mute');
+muteBtn.textContent = Kit.audio.muted ? '🔇' : '🔊';
+muteBtn.onclick = function () { muteBtn.textContent = Kit.audio.toggle() ? '🔇' : '🔊'; };
+addEventListener('keydown', function (e) { if (e.code === 'Space') pp.onclick(); });
+addEventListener('pointerdown', function (e) { if (!e.target.closest('[data-kit-ui]')) pp.onclick(); });
+
+Kit.ui.overlay({
+  title: 'New video',
+  body: 'Frankie is writing this one. It plays here as soon as it is saved.',
+  button: '▶ Watch',
+  onClick: function () { film.play(); }
+});
+
+Kit.loop(film.update, render);
+</script>
+</body>
+</html>

@@ -1,6 +1,8 @@
-import { TEMPLATES, type GameTemplate } from "@polly/templates";
+import { TEMPLATES as ALL_TEMPLATES, type GameTemplate } from "@polly/templates";
 
-export { TEMPLATES, type GameTemplate };
+export type { GameTemplate };
+// the starters people browse and play; unlisted ones (the blank video) only start new work
+export const TEMPLATES = ALL_TEMPLATES.filter((t) => t.listed);
 
 // Ember is the reference game: the full build every practice comes from.
 export const EMBER = {
@@ -20,5 +22,5 @@ export function findTemplate(id: string | null | undefined): GameTemplate | unde
 // A game's cover emoji: its starter's, or a controller.
 export function gameEmoji(starterId: string | null | undefined): string {
   if (starterId === EMBER.id) return EMBER.emoji;
-  return findTemplate(starterId)?.emoji ?? "🎮";
+  return ALL_TEMPLATES.find((t) => t.id === starterId)?.emoji ?? "🎮";
 }

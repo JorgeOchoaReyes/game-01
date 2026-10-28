@@ -62,11 +62,14 @@ function pickStarter(idea: string): string {
   return "slime-arena";
 }
 
-// What Frankie is asked first. A video starts from the example film, so the
-// request says to replace its scenes with the new topic.
+// What Frankie is asked first. A video starts from the blank film (one
+// placeholder scene), so Frankie writes the whole file for the topic in one save
+// instead of editing another film's scenes piece by piece.
 function firstMessage(mode: CreateMode, idea: string, format: Format): string {
   if (mode === "game") return idea;
-  return `Make a ${FORMAT_WORDS[format]} about: ${idea}. Replace the example film's scenes with new ones for this topic (6 to 8 scenes, short punchy captions, drawn visuals and sound for each), keep CFG.format as it is, and update the title.`;
+  return `Make a ${FORMAT_WORDS[format]} about: ${idea}. The open video is a blank film with one placeholder scene. ` +
+    `Read it, then save the complete new film with updateGame html: a new <title> and overlay title, 6 to 8 scenes about this topic ` +
+    `(short punchy captions, every visual drawn on the canvas, a sound for each), keeping CFG.format as it is.`;
 }
 
 // "What do you want to make?" -> a new game or video open in the studio with
@@ -104,7 +107,7 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
       const res = await fetch("/api/v1/games", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(mode === "video" ? { starterId: "ancient-cooking", format, title: what.slice(0, 80) } : { starterId: pickStarter(what) }),
+        body: JSON.stringify(mode === "video" ? { starterId: "blank-film", format, title: what.slice(0, 80) } : { starterId: pickStarter(what) }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message || "Couldn't make it.");

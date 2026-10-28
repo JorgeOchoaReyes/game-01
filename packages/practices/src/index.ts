@@ -46,7 +46,7 @@ These are the practices Ember was built with. Every Polly game follows them.
 - Difficulty escalates over time (waves, speed-ups, nights) so the game has an arc.
 
 ## 8. Animations and explainer videos
-- A file can be a short video instead of a game: \`Kit.film(scenes)\`, each scene a \`caption\` and a \`draw(ctx, t, p)\`. Start from the video starter (3D, Three.js drawn into the canvas).
+- A file can be a short video instead of a game: \`Kit.film(scenes)\`, each scene a \`caption\` and a \`draw(ctx, t, p)\`. A new video starts from \`blank-film\`: write the whole film for the topic in one updateGame html save. \`ancient-cooking\` is a finished 3D example (Three.js drawn into the canvas).
 - Draw everything on the canvas; Kit.film adds captions. Animate from \`t\`/\`p\` only. Scenes 4 to 9 s.
 - Captions: one short spoken sentence each (also the voiceover script); *star* key words.
 - Shorts first: \`CFG.format\` 'portrait' (9:16), 'landscape' or 'square'. Subject big, centred, close up.

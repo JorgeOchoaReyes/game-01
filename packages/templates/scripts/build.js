@@ -11,11 +11,14 @@ const META = {
   'star-catcher': { title: 'Star Catcher', emoji: '⭐', kind: '2D arcade', blurb: 'Catch stars, dodge meteors. Canvas, juice, best score.' },
   'campfire-3d': { title: 'Campfire', emoji: '🔥', kind: '3D survival', blurb: 'Ember in miniature: a real fire light, gather and feed.' },
   'ancient-cooking': { title: 'How Did the Ancients Cook?', emoji: '🍲', kind: 'Animation', blurb: 'A one-minute animated history with captions and sound. Make your own and record it as a video.' },
+  // not shown in the catalog: where every new video starts, so nothing from another topic is on screen
+  'blank-film': { title: 'Blank Video', emoji: '🎬', kind: 'Animation', blurb: 'An empty film for a new video: write every scene for your topic.', listed: false },
   'coin-rush-multiplayer': { title: 'Coin Rush', emoji: '🪙', kind: 'Multiplayer', blurb: 'Online rooms with invite links, or 2 players on 1 keyboard.' },
 };
 
 const templates = Object.keys(META).map((id) => ({
   id,
+  listed: true,
   ...META[id],
   html: fs.readFileSync(path.join(ROOT, 'templates', id + '.html'), 'utf8'),
 }));
@@ -29,6 +32,7 @@ fs.writeFileSync(path.join(ROOT, 'dist', 'index.d.ts'), `export interface GameTe
   emoji: string;
   kind: string;
   blurb: string;
+  listed: boolean;
   html: string;
 }
 export declare const TEMPLATES: GameTemplate[];
