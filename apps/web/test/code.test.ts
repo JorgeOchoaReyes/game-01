@@ -4,6 +4,7 @@ import path from "node:path";
 import { TEMPLATES } from "@polly/templates";
 import { applyEdits, checkGame, codeSummary, readRange, search, unknownKitCalls } from "@/lib/server/code";
 import { HttpError } from "@/lib/server/http";
+import { filmLines } from "@/lib/server/voice";
 
 const ember = fs.readFileSync(path.join(__dirname, "..", "..", "..", "games", "ember", "index.html"), "utf8");
 const star = TEMPLATES.find((t) => t.id === "star-catcher")!.html;
@@ -113,5 +114,29 @@ describe("checks", () => {
 
   it("warns when a game uses the network", () => {
     expect(checkGame(star.replace("var CFG = {", "fetch('https://x.test');\nvar CFG = {")).warnings.join(" ")).toContain("offline");
+  });
+});
+
+describe("the blank film", () => {
+  const blank = TEMPLATES.find((t) => t.id === "blank-film")!.html;
+  const scene = (caption: string) => `  { dur: 5, caption: '${caption}', draw: function (ctx, t, p) { ctx.fillStyle = '#123'; ctx.fillRect(0, 0, W, H); boom(t); } },\n  // @next-scene`;
+
+  it("grows one small save at a time through its markers", () => {
+    let html = blank;
+    const step = (edits: { find: string; replace: string }[]) => {
+      html = applyEdits(html, edits).html;
+      expect(checkGame(html).warnings).toEqual([]);
+    };
+    step([{ find: "<title>New Video</title>", replace: "<title>The Death Star Explodes</title>" }, { find: "title: 'New video',", replace: "title: 'The Death Star explodes'," }]);
+    step([{ find: "// @helpers", replace: "function boom(t) { ctx.fillStyle = CFG.gold; ctx.fillRect(0, 0, t * U, U); }\n// @helpers" }]);
+    step([{ find: "  // @next-scene", replace: scene("A *moon-sized* station.") }]);
+    step([{ find: "  // @next-scene", replace: scene("One shot... *boom.*") }]);
+    expect(html.match(/@next-scene/g)).toHaveLength(1);
+    expect(html.match(/@helpers/g)).toHaveLength(1);
+  });
+
+  it("gives the voiceover only real scenes, never the placeholder", () => {
+    expect(filmLines(blank)).toEqual([]);
+    expect(filmLines(applyEdits(blank, [{ find: "  // @next-scene", replace: scene("Hello *there.*") }]).html)).toEqual(["Hello there."]);
   });
 });

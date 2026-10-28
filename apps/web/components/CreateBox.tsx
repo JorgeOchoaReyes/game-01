@@ -62,14 +62,15 @@ function pickStarter(idea: string): string {
   return "slime-arena";
 }
 
-// What Frankie is asked first. A video starts from the blank film (one
-// placeholder scene), so Frankie writes the whole file for the topic in one save
-// instead of editing another film's scenes piece by piece.
+// What Frankie is asked first. A video starts from the blank film, and Frankie
+// builds it in small saves (title, helpers, then one scene each) at the file's
+// markers, so the preview fills in scene by scene and one bad edit costs one step.
 function firstMessage(mode: CreateMode, idea: string, format: Format): string {
   if (mode === "game") return idea;
-  return `Make a ${FORMAT_WORDS[format]} about: ${idea}. The open video is a blank film with one placeholder scene. ` +
-    `Read it, then save the complete new film with updateGame html: a new <title> and overlay title, 6 to 8 scenes about this topic ` +
-    `(short punchy captions, every visual drawn on the canvas, a sound for each), keeping CFG.format as it is.`;
+  return `Make a ${FORMAT_WORDS[format]} about: ${idea}. The open video is a blank film built in steps; read its top comment and follow it. ` +
+    `Plan 6 to 8 scenes first (one short punchy caption each), then save one step per editGame call: the title, any shared drawing helpers at // @helpers, ` +
+    `then each scene at // @next-scene, in order, with every visual drawn on the canvas and a sound in enter(). ` +
+    `Keep CFG.format as it is. If a save is refused, fix that step and carry on; keep going until every scene is in.`;
 }
 
 // "What do you want to make?" -> a new game or video open in the studio with

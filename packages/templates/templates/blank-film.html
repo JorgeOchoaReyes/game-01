@@ -20,8 +20,15 @@
 <script>
 "use strict";
 /*
- * A BLANK POLLY STUDIO VIDEO. Write the whole film for your topic: a new title,
- * 6 to 8 scenes in `scenes`, and the overlay text at the bottom.
+ * A BLANK POLLY STUDIO VIDEO, built one step at a time. Each step is one small
+ * editGame save, so the preview grows scene by scene and a mistake costs one step:
+ *   1. the title: <title> and the overlay title at the bottom
+ *   2. shared drawing helpers (optional): insert them at the marker comment
+ *      under "Shared drawing helpers", and put the marker back after them
+ *   3. each scene, in order: insert it at the marker comment inside `scenes`,
+ *      ending with a comma, and put the marker back after it
+ * Each marker is in the file exactly once (only there, never in a comment), so
+ * an edit whose find is that one marker line always matches. Keep them.
  *
  * Each scene: { dur, caption, enter(), draw(ctx, t, p) }. t = seconds into the
  * scene, p = 0..1. Draw the full frame every time (background first), from t/p
@@ -54,11 +61,22 @@ function pad(chord, vol) { chord.forEach(function (f, i) { Kit.audio.tone({ freq
 function whoosh() { Kit.audio.noise({ dur: 0.45, cutoff: 900, vol: 0.12 }); }
 
 // ---------------------------------------------------------------------------
-// The scenes (replace this placeholder with the real film)
+// Shared drawing helpers for this film's subject
+// ---------------------------------------------------------------------------
+// @helpers
+
+// ---------------------------------------------------------------------------
+// The scenes, in order
 // ---------------------------------------------------------------------------
 var scenes = [
-  { // placeholder while the film is being written
-    dur: 6, caption: 'Your video is *being written...*',
+  // @next-scene
+];
+
+// until the first scene is written, a neutral placeholder plays (its caption is
+// set here, not as a scene field, so the voiceover never reads it)
+if (!scenes.length) {
+  var placeholder = {
+    dur: 6,
     enter: function () { pad([196, 247, 294]); },
     draw: function (ctx, t, p) {
       ctx.fillStyle = CFG.bg; ctx.fillRect(0, 0, W, H);
@@ -76,8 +94,10 @@ var scenes = [
       }
       ctx.restore();
     }
-  }
-];
+  };
+  placeholder.caption = 'Your video is *being written...*';
+  scenes.push(placeholder);
+}
 
 // ---------------------------------------------------------------------------
 // Playback and controls
