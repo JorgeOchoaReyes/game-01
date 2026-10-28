@@ -41,7 +41,7 @@ export function VoiceSettings() {
     <section className="card settings-card">
       <div className="settings-head">
         <div>
-          <h2>🎙 Voiceovers with ElevenLabs</h2>
+          <h2>Voiceovers with ElevenLabs</h2>
           <p className="muted">Add your own ElevenLabs API key and your videos get a narrator: each scene&apos;s caption, read aloud, recorded into the video.</p>
         </div>
         <span className={`pill${s.connected ? " on" : ""}`}>{s.connected ? `Connected ${s.keyHint}` : "Not connected"}</span>

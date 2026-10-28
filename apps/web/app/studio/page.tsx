@@ -1,11 +1,10 @@
 import { currentUser } from "@/lib/server/session";
 import { listGames } from "@/lib/server/games";
 import { listStarters } from "@/lib/server/starters";
-import { gameEmoji } from "@/lib/catalog";
+import { EMBER, findTemplate, gameEmoji } from "@/lib/catalog";
 import { CreateBox } from "@/components/CreateBox";
 import { GameArt, GameTile } from "@/components/GameTile";
 import { RemixButton } from "@/components/RemixButton";
-import { PollyDog } from "@/components/PollyDog";
 
 export const metadata = { title: "Create · Polly Studio" };
 export const dynamic = "force-dynamic";
@@ -19,14 +18,15 @@ export default async function Create({ searchParams }: { searchParams: Promise<{
   const format = params.format === "landscape" || params.format === "square" ? params.format : "portrait";
   const user = await currentUser().catch(() => null);
   const games = user ? await listGames(user) : [];
-  const starters = listStarters();
+  // the browsable starters: not the blank film new videos start from
+  const starters = listStarters().filter((s) => s.id === EMBER.id || findTemplate(s.id));
 
   return (
     <main className="wrap create-page">
       <section className="create-hero">
-        <PollyDog size={88} />
-        <h1>Make something new</h1>
-        <p className="muted">A game or a video. Say what it is: Frankie starts building right away, and you watch it grow.</p>
+        <span className="eyebrow">New project</span>
+        <h1>What do you want to make?</h1>
+        <p className="muted">Describe a game or a video. Frankie starts building right away, and the preview updates as it goes.</p>
         <CreateBox signedIn={!!user && !user.anonymous} autoFocus={games.length === 0} startWith={idea} startMode={mode} startFormat={format} />
       </section>
 
@@ -60,7 +60,7 @@ export default async function Create({ searchParams }: { searchParams: Promise<{
                 <b>{s.title}</b>
                 <p className="muted small">{s.blurb}</p>
               </div>
-              <RemixButton starter={s.id} label="Start here" />
+              <RemixButton starter={s.id} label="Start here" primary={false} />
             </div>
           ))}
         </div>

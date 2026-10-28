@@ -5,6 +5,7 @@ import { findGame, ownerName } from "@/lib/server/games";
 import { currentUser } from "@/lib/server/session";
 import { GamePage } from "@/components/GamePage";
 import { RemixButton } from "@/components/RemixButton";
+import { Icon } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +31,11 @@ export default async function PlayGame({ params }: { params: Promise<{ id: strin
       meta={`updated ${game.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
       html={game.html}
       countPlay={game.id}
-      notice={game.visibility !== "public" ? <p className="muted small">🔒 Private: only you can see this. Make it public from the studio to share it.</p> : null}
+      notice={game.visibility !== "public" ? <p className="muted small">Private: only you can see this. Make it public from the studio to share it.</p> : null}
       actions={
         <>
-          {mine ? <Link className="btn big" href={`/studio/${game.id}`}>✏️ Edit with Frankie</Link> : <RemixButton remix={game.id} label="Remix" big />}
-          <a className="btn big" href={`/api/v1/games/${game.id}/download`}>⬇ Download</a>
+          {mine ? <Link className="btn big" href={`/studio/${game.id}`}>Edit with Frankie</Link> : <RemixButton remix={game.id} label="Remix" big />}
+          <a className="btn big" href={`/api/v1/games/${game.id}/download`}><Icon name="download" /> Download</a>
         </>
       }
     />

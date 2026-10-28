@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
 
 export type CreateMode = "game" | "video";
 type Format = "portrait" | "landscape" | "square";
@@ -132,10 +133,10 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
     <div className="create">
       <div className="modes" role="tablist" aria-label="What to make">
         <button type="button" role="tab" aria-selected={!video} className={!video ? "on" : ""} onClick={() => setMode("game")} disabled={busy}>
-          <span>🎮</span> Game
+          <Icon name="game" size={17} /> Game
         </button>
         <button type="button" role="tab" aria-selected={video} className={video ? "on" : ""} onClick={() => setMode("video")} disabled={busy}>
-          <span>🎬</span> Video
+          <Icon name="film" size={17} /> Video
         </button>
       </div>
       <form
@@ -162,7 +163,8 @@ export function CreateBox({ signedIn, autoFocus = false, startWith, startMode = 
           disabled={busy}
         />
         <button className="btn primary big" type="submit" disabled={busy || !idea.trim()}>
-          {busy ? "Making it…" : signedIn ? "Make it ✨" : "Sign up & make it ✨"}
+          {busy ? "Starting…" : signedIn ? "Create" : "Sign up to create"}
+          {!busy && <Icon name="arrow" />}
         </button>
       </form>
       {video && (

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { GameArt, formatPlays } from "./GameTile";
+import { Icon } from "./Icon";
 import { PlayTemplate } from "./PlayTemplate";
 
 type Props = {
@@ -54,19 +55,19 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
           <>
             {html ? <PlayTemplate html={html} /> : <iframe title={title} src={src} allow="autoplay; fullscreen; gamepad" />}
             <div className="stage-controls">
-              <button className="btn small" onClick={() => void stage.current?.requestFullscreen?.()} title="Full screen (Esc to leave)">⛶ Full screen</button>
-              <button className="btn small stop" onClick={stop} title="Stop playing and go back to the game page">■ Stop game</button>
+              <button className="btn small" onClick={() => void stage.current?.requestFullscreen?.()} title="Full screen (Esc to leave)"><Icon name="expand" /> Full screen</button>
+              <button className="btn small stop" onClick={stop} title="Stop playing and go back to the game page"><Icon name="stop" /> Stop game</button>
             </div>
           </>
         ) : (
           <button className="cover" onClick={play} aria-label={`Play ${title}`}>
             <GameArt seed={seed} emoji={emoji} big />
-            <span className="play-badge">▶</span>
+            <span className="play-badge"><Icon name="play" size={30} /></span>
           </button>
         )}
       </div>
 
-      {playing && <p className="stage-hint muted small">Playing. Press <b>■ Stop playing</b> to end the game, or Esc to leave full screen.</p>}
+      {playing && <p className="stage-hint muted small">Playing. Press <b>Stop playing</b> to end the game, or Esc to leave full screen.</p>}
 
       <div className="game-info">
         <div className="game-title">
@@ -76,9 +77,9 @@ export function GamePage({ seed, emoji, title, by, blurb, plays, meta, html, src
         </div>
         <div className="game-actions">
           {playing ? (
-            <button className="btn stop big" onClick={stop}>■ Stop playing</button>
+            <button className="btn stop big" onClick={stop}><Icon name="stop" /> Stop playing</button>
           ) : (
-            <button className="btn play big" onClick={play}>▶ Play</button>
+            <button className="btn play big" onClick={play}><Icon name="play" /> Play</button>
           )}
           {actions}
         </div>

@@ -56,14 +56,14 @@ export function AuthForm({ mode, next, guest = false }: { mode: "login" | "signu
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <PollyDog size={84} className="auth-dog" mood={signup ? "happy" : "wink"} />
+        <PollyDog size={56} className="auth-dog" />
         <h1>{signup ? (guest ? "Keep your games" : "Make an account") : "Welcome back"}</h1>
         <p className="muted">
           {signup
             ? guest
               ? "You're building as a guest. Make an account and your games come with you."
-              : "Join Polly Studio: make games and videos with Frankie, keep your streak going, share what you build."
-            : "Polly missed you. Log in to keep building and keep your streak."}
+              : "Make games and videos with Frankie, then play, share and export what you build."
+            : "Log in to pick up where you left off."}
         </p>
         <button className="btn" type="button" disabled={busy} onClick={() => void finish(() => signInWithPopup(firebaseAuth(), new GoogleAuthProvider()))}>
           Continue with Google

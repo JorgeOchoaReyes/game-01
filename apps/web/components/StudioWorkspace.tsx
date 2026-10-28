@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { FrankieInline, FrankieProvider, useFrankieChat, type ToolActivity } from "@frankieai/react";
 import "@frankieai/react/styles.css";
 import { GameFrame, saveFile } from "./GameFrame";
+import { Icon } from "./Icon";
 import { FILM_FORMATS, filmFormat, filmProgress, isFilm, isPortrait, usesNet, withFilmFormat, type FilmFormat } from "@/lib/game-html";
 
 type StudioGame = { id: string; title: string; version: number; visibility: "private" | "public"; html: string };
@@ -154,7 +155,7 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
     <section className="stage">
       <div className="toolbar">
         <span className="title">{game.title}</span>
-        {savedNote && <span className="saved">✓ {savedNote}</span>}
+        {savedNote && <span className="saved"><Icon name="check" size={14} /> {savedNote}</span>}
         <select
           aria-label="Version history"
           value=""
@@ -185,36 +186,36 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
         )}
         {film && (
           voiceState === "connect" ? (
-            <a className="btn small" href="/settings" title={voiceError ?? undefined}>🎙 Connect ElevenLabs</a>
+            <a className="btn small" href="/settings" title={voiceError ?? undefined}><Icon name="mic" /> Connect ElevenLabs</a>
           ) : (
             <button className={`btn small${voiceState === "on" ? " primary" : ""}`} onClick={() => void toggleVoice()} disabled={voiceState === "loading" || recording} title={voiceError ?? "Narrate each scene's caption with your ElevenLabs voice"}>
-              {voiceState === "loading" ? "🎙 Writing voiceover…" : voiceState === "on" ? "🎙 Voiceover on" : "🎙 Voiceover"}
+              <Icon name="mic" /> {voiceState === "loading" ? "Writing voiceover…" : voiceState === "on" ? "Voiceover on" : "Voiceover"}
             </button>
           )
         )}
         {film && (
           <button className="btn small rec" onClick={startRecording} disabled={recording} title="Plays the video once from the start and saves it as a file">
-            {recording ? "⏺ Recording… let it play" : "⏺ Record video"}
+            <Icon name="record" size={12} /> {recording ? "Recording… let it play" : "Record video"}
           </button>
         )}
-        <button className="btn small" onClick={() => { setGameError(null); setRunKey((k) => k + 1); }}>↻ Restart</button>
-        {!film && <button className="btn small" onClick={() => setFull((f) => !f)}>{full ? "Phone size" : "Wide"}</button>}
+        <button className="btn small" onClick={() => { setGameError(null); setRunKey((k) => k + 1); }}><Icon name="restart" /> Restart</button>
+        {!film && <button className="btn small" onClick={() => setFull((f) => !f)}><Icon name={full ? "phone" : "monitor"} /> {full ? "Phone size" : "Wide"}</button>}
         <button className="btn small" onClick={() => save({ visibility: game.visibility === "public" ? "private" : "public" })}>
-          {game.visibility === "public" ? "🌐 Public" : "🔒 Private"}
+          <Icon name={game.visibility === "public" ? "globe" : "lock"} /> {game.visibility === "public" ? "Public" : "Private"}
         </button>
-        {game.visibility === "public" && <a className="btn small" href={`/g/${game.id}`} target="_blank" rel="noreferrer">Play page ↗</a>}
-        <a className="btn small primary" href={`/api/v1/games/${game.id}/download`}>⬇ Download</a>
+        {game.visibility === "public" && <a className="btn small" href={`/g/${game.id}`} target="_blank" rel="noreferrer">Play page <Icon name="external" size={14} /></a>}
+        <a className="btn small primary" href={`/api/v1/games/${game.id}/download`}><Icon name="download" /> Download</a>
       </div>
       {voiceError && voiceState === "off" && (
         <div className="errbar">
-          <span>🎙 {voiceError}</span>
+          <span>{voiceError}</span>
           <button className="btn small" onClick={() => setVoiceError(null)}>OK</button>
         </div>
       )}
       {building}
       {gameError && (
         <div className="errbar">
-          <span>⚠️ {gameError}</span>
+          <span>{gameError}</span>
           {fixButton}
         </div>
       )}
