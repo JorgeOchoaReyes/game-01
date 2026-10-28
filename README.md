@@ -174,6 +174,21 @@ node scripts/set-admin.mjs you@example.com --remove
 
 The claim reaches the site at the next sign-in: log out and back in.
 
+### Community rules and reports
+
+Game violence is fine; sexual content, nudity, slurs and vulgar language are not (`/rules`).
+Frankie is told so in the game guide. `lib/server/moderation.ts` checks a game's title and
+on-screen text (quoted strings and page text, not comments) when it's published and on every
+save while it's public, and refuses with `422 content_not_allowed`; the studio shows why.
+Anyone can report a public game from its page (`POST /api/games/<id>/report`); reports
+appear in the `/admin` feed, where an admin can open the game and unpublish it.
+
+### Content pages
+
+`/blog` (posts in `lib/posts.tsx`), `/faq` (`lib/faqs.ts`, also on the home page),
+`/roadmap`, `/rules`, three guides (`/ai-game-maker`, `/ai-video-maker`,
+`/mobile-game-maker`), and `sitemap.xml`, `robots.txt` and `llms.txt` generated from them.
+
 ### Playing and sharing
 
 - `/g/<id>` is a game or video's page: cover art, a big ▶ Play, **■ Stop playing**, full

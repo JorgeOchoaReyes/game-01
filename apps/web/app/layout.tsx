@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Fredoka, Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Geist_Mono, Nunito } from "next/font/google";
 import { currentUser } from "@/lib/server/session";
 import { LogoutButton } from "@/components/LogoutButton";
 import { PollyDog } from "@/components/PollyDog";
@@ -9,8 +9,8 @@ import { streakStatus } from "@/lib/server/streaks";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
-// Geist for the interface; the rounded Fredoka only for the Polly Studio wordmark
-const body = Geist({ subsets: ["latin"], display: "swap", variable: "--font-body" });
+// Nunito, rounded and heavy, for the interface; Fredoka for the Polly Studio wordmark
+const body = Nunito({ subsets: ["latin"], weight: ["500", "600", "700", "800", "900"], display: "swap", variable: "--font-body" });
 const mono = Geist_Mono({ subsets: ["latin"], display: "swap", variable: "--font-mono" });
 const brand = Fredoka({ subsets: ["latin"], weight: ["600", "700"], display: "swap", variable: "--font-brand" });
 

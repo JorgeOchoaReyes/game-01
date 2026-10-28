@@ -365,6 +365,111 @@ label.settings-row { flex-direction: column; align-items: stretch; }
 .plan li { display: flex; gap: 9px; align-items: center; color: #d4d4d8; font-size: 14px; }
 .plan li .icon { color: var(--primary); }
 
+/* ---- chunky layer ------------------------------------------------------------------
+   The look of a game, not a dashboard: rounded heavy type, thick borders with a
+   heavier bottom edge, and buttons with a lip that presses down. Colours stay
+   black, gold and white. */
+:root { --lip: #9c7c1d; --edge: #2c2c31; --edge-2: #3a3a40; --radius: 18px; --radius-sm: 14px; }
+h1, h2, h3 { font-weight: 800; letter-spacing: -.015em; }
+.hero h1, .create-hero h1, .pricing-head h1, .guide h1 { font-weight: 900; letter-spacing: -.025em; }
+
+.btn { height: 44px; padding: 0 18px; border-radius: 14px; border: 2px solid var(--edge-2); border-bottom-width: 4px; background: var(--panel-2); font-weight: 800; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; transition: transform .08s, border-bottom-width .08s, background .15s, filter .15s; }
+.btn:hover { background: var(--panel-3); filter: brightness(1.08); }
+.btn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 2px; }
+.btn.primary { background: var(--primary); border-color: var(--primary); border-bottom-color: var(--lip); color: var(--on-primary); }
+.btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); border-bottom-color: var(--lip); }
+.btn.play { border-color: #fff; border-bottom-color: #a1a1aa; }
+.btn.stop { border-bottom-color: #a32424; }
+.btn.ghost { border-color: transparent; text-transform: none; letter-spacing: 0; font-weight: 700; }
+.btn.ghost:active { transform: none; }
+.btn.small { height: 36px; padding: 0 12px; font-size: 12px; border-radius: 12px; border-bottom-width: 3px; }
+.btn.small:active:not(:disabled) { border-bottom-width: 1px; }
+.btn.big { height: 52px; padding: 0 26px; font-size: 15px; border-radius: 16px; }
+.btn.primary:disabled { border-color: var(--edge-2); border-bottom-color: var(--edge-2); }
+.topnav a:not(.btn) { font-weight: 800; }
+
+.card, .plan, .starter, .guide-card, .post-card, .empty { border: 2px solid var(--edge); border-bottom-width: 4px; border-radius: var(--radius); }
+.plan.pro { border-color: var(--primary); border-bottom-color: var(--lip); box-shadow: none; }
+.plan .price b { font-weight: 900; }
+.guide-card:hover, .post-card:hover, .starter:hover { border-color: var(--edge-2); background: var(--panel-2); }
+
+.chip { border: 2px solid var(--edge); border-bottom-width: 3px; border-radius: 14px; padding: 7px 13px; font-weight: 700; color: #d4d4d8; transition: transform .08s, background .15s; }
+.chip:hover { border-color: var(--edge-2); }
+.chip:active { transform: translateY(1px); border-bottom-width: 2px; }
+
+.modes { padding: 4px; border: 2px solid var(--edge); border-radius: 16px; }
+.modes button { height: 40px; padding: 0 16px; border-radius: 12px; font-weight: 800; font-size: 15px; }
+.modes button.on { background: var(--primary-soft); color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
+.tabs { border: 2px solid var(--edge); border-radius: 14px; padding: 4px; }
+.tabs a { font-weight: 800; border-radius: 10px; }
+.tabs a.on { background: var(--primary-soft); color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
+
+.create-box { border: 2px solid var(--edge-2); border-bottom-width: 5px; border-radius: 22px; padding: 12px; }
+.create-box:focus-within { border-color: var(--primary); border-bottom-color: var(--lip); box-shadow: var(--shadow); }
+.create-box textarea { font-weight: 600; font-size: 17px; }
+.create-box .btn { height: 48px; }
+.format { height: 38px; border: 2px solid var(--edge); border-bottom-width: 3px; border-radius: 12px; font-weight: 800; }
+.format.on { border-color: var(--primary); border-bottom-color: var(--lip); background: var(--primary-soft); color: var(--primary); }
+
+.search input, .auth input, .settings-row input, .settings-row select { border: 2px solid var(--edge); border-radius: 14px; font-weight: 600; }
+.search input { height: 40px; }
+.auth input, .settings-row input, .settings-row select { height: 46px; }
+
+.tile .art { border: 2px solid var(--edge); border-bottom-width: 5px; border-radius: 22px; }
+.tile:hover .art { transform: translateY(-4px); border-color: var(--primary); border-bottom-color: var(--lip); }
+.tile-body b { font-weight: 800; font-size: 15px; }
+.badge { font-weight: 800; border-radius: 8px; }
+.starter .art { border: 2px solid var(--edge); border-radius: 14px; }
+
+.how { gap: 14px; background: none; border: 0; }
+.how > div { border: 2px solid var(--edge); border-bottom-width: 4px; border-radius: var(--radius); }
+.how .step { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-family: var(--font-body), sans-serif; font-weight: 900; font-size: 14px; }
+.how b { font-weight: 800; font-size: 17px; }
+
+.faq { border: 2px solid var(--edge); border-bottom-width: 4px; border-radius: var(--radius); }
+.faq details { border-bottom: 2px solid var(--edge); }
+.faq summary { font-weight: 800; }
+.faq summary::after { font-weight: 900; }
+.stats { gap: 12px; background: none; border: 0; }
+.stats div { border: 2px solid var(--edge); border-bottom-width: 4px; border-radius: 16px; }
+.stats b { font-weight: 900; }
+.streak { height: 34px; padding: 0 12px; border-width: 2px; font-weight: 900; font-size: 14px; }
+.avatar { font-weight: 900; }
+.eyebrow, .kind { font-weight: 900; }
+.toolbar .title { font-weight: 800; }
+
+/* Polly says hello */
+.mascot .bubble { position: absolute; top: 4px; right: 4px; z-index: 2; background: #fff; color: #111; font-weight: 800; font-size: 15px; line-height: 1.3; padding: 10px 14px; border-radius: 16px 16px 4px 16px; border: 2px solid #e4e4e7; border-bottom-width: 4px; max-width: 190px; }
+
+/* ---- blog and FAQ ------------------------------------------------------------------ */
+.posts { display: grid; gap: 14px; margin-top: 28px; }
+.post-card { display: flex; flex-direction: column; gap: 6px; padding: 22px 24px; background: var(--panel); text-decoration: none; color: var(--text); }
+.post-card b { font-size: 21px; font-weight: 900; line-height: 1.25; }
+.post-card .read { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 800; margin-top: 4px; }
+.guide.post h1, .guide.blog h1, .guide.faq-page h1 { font-size: clamp(32px, 4.6vw, 48px); line-height: 1.08; margin: 10px 0 8px; }
+.guide.post .hero-lede, .guide.faq-page .hero-lede, .guide.blog .hero-lede { font-size: 18px; color: #d4d4d8; margin-top: 18px; }
+.guide .cta { margin-top: 48px; padding: 26px; border: 2px solid var(--primary); border-bottom: 5px solid var(--lip); border-radius: 22px; background: var(--primary-soft); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.guide .cta b { font-size: 22px; font-weight: 900; }
+.guide .cta p { margin: 0 0 10px; }
+.guide .cta .btn { color: var(--on-primary); text-decoration: none; }
+.guide.faq-page, .guide.blog, .guide.post { padding-top: 48px; padding-bottom: 24px; }
+
+/* ---- roadmap, rules, reports ------------------------------------------------------- */
+.roadmap { padding-top: 48px; padding-bottom: 24px; }
+.roadmap h1 { font-size: clamp(32px, 4.6vw, 48px); font-weight: 900; margin: 10px 0 8px; letter-spacing: -.025em; }
+.roadmap .hero-lede { max-width: 680px; }
+.roadmap .hero-lede a { color: var(--primary); }
+.roads { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 28px; align-items: start; }
+.road { border: 2px solid var(--edge); border-bottom-width: 4px; border-radius: var(--radius); padding: 20px; background: var(--panel); display: flex; flex-direction: column; gap: 14px; }
+.road h2 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.road.done { border-color: var(--primary); border-bottom-color: var(--lip); }
+.road.done h2 { color: var(--primary); }
+.road-item { display: flex; gap: 10px; align-items: flex-start; }
+.road-item .icon { color: var(--primary); margin-top: 3px; }
+.road-item b { font-weight: 800; }
+.road-item p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.report { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+
 /* ---- phones -------------------------------------------------------------------------- */
 @media (max-width: 860px) {
   .topbar { gap: 8px; padding: 0 12px; }

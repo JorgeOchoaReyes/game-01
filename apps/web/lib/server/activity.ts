@@ -14,6 +14,7 @@ export type EventType =
   | "game.restore"
   | "game.delete"
   | "game.play"
+  | "game.report"
   | "voice.narrate"
   | "billing.checkout"
   | "billing.subscription";

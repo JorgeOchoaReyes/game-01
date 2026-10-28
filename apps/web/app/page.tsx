@@ -6,8 +6,8 @@ import { CreateBox } from "@/components/CreateBox";
 import { GameTile } from "@/components/GameTile";
 import { PollyDog } from "@/components/PollyDog";
 import { Icon } from "@/components/Icon";
-import { FaqList, JsonLd, faqLd, type Faq } from "@/components/JsonLd";
-import { FREE_GAMES } from "@/lib/server/billing";
+import { FaqList, JsonLd } from "@/components/JsonLd";
+import { ALL_FAQS } from "@/lib/faqs";
 import { GUIDES, SITE_DESCRIPTION, SITE_NAME, SITE_URL, pageMeta } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +19,8 @@ export const metadata = pageMeta({
   path: "/",
 });
 
-const FAQS: Faq[] = [
-  { q: "Can AI really make a whole game?", a: "Yes. Describe the game in a sentence and Frankie, Polly Studio's AI, writes a complete, playable browser game: movement, scoring, sound and a win or lose screen. You then ask for changes in plain words, and the preview reloads with each one." },
-  { q: "Do I need to know how to code?", a: "No. You talk to Frankie in plain language. If you do code, every game is one readable HTML file you can download and edit by hand." },
-  { q: "Can I make games for phones?", a: "Yes. Pick Mobile when you start and the game is built portrait with touch controls. Desktop games use keyboard and mouse." },
-  { q: "What kind of videos can it make?", a: "Animated explainer shorts in 9:16, 16:9 or square, with captions, sound and an optional voiceover, recorded to MP4 for YouTube Shorts, TikTok and Reels." },
-  { q: "Is Polly Studio free?", a: `Your first ${FREE_GAMES === 1 ? "game or video is" : `${FREE_GAMES} games or videos are`} free, with every feature. Polly Studio Pro is $10 a month for unlimited games and videos.` },
-];
+// the first few on the home page; all of them on /faq
+const FAQS = ALL_FAQS.filter((f) => ["Can AI really make a whole game?", "Do I need to know how to code?", "Can I make games for phones?", "What videos can it make?", "Is Polly Studio free?"].includes(f.q));
 
 const SITE_LD = {
   "@context": "https://schema.org",
@@ -73,6 +68,7 @@ export default async function Home() {
             <CreateBox signedIn={!!named} autoFocus />
           </div>
           <div className="mascot" aria-hidden>
+            <span className="bubble">Tell me your idea and I&apos;ll fetch it!</span>
             <div className="halo" />
             <PollyDog size={220} />
           </div>
@@ -136,17 +132,16 @@ export default async function Home() {
           </div>
         </section>
         <section className="row">
-          <div className="row-head"><h2>Questions</h2></div>
+          <div className="row-head"><h2>Questions</h2><Link href="/faq" className="see-all">All questions <Icon name="arrow" size={14} /></Link></div>
           <FaqList faqs={FAQS} />
         </section>
       </div>
       <JsonLd data={SITE_LD} />
-      <JsonLd data={faqLd(FAQS)} />
 
       <footer className="footer">
         <div className="footer-brand"><PollyDog size={28} /><span>Polly Studio</span></div>
         <span>Every game and video is one readable file you own.</span>
-        <nav><Link href="/ai-game-maker">AI game maker</Link><Link href="/ai-video-maker">AI video maker</Link><Link href="/games">Discover</Link><Link href="/pricing">Pricing</Link><Link href="/practices">How it&apos;s built</Link></nav>
+        <nav><Link href="/ai-game-maker">AI game maker</Link><Link href="/ai-video-maker">AI video maker</Link><Link href="/games">Discover</Link><Link href="/pricing">Pricing</Link><Link href="/blog">Blog</Link><Link href="/faq">FAQ</Link><Link href="/roadmap">Roadmap</Link><Link href="/rules">Rules</Link></nav>
       </footer>
     </main>
   );

@@ -7,6 +7,7 @@ import { GamePage } from "@/components/GamePage";
 import { RemixButton } from "@/components/RemixButton";
 import { Icon } from "@/components/Icon";
 import { JsonLd } from "@/components/JsonLd";
+import { ReportButton } from "@/components/ReportButton";
 import { SITE_URL } from "@/lib/site";
 import { pageMeta } from "@/lib/site";
 
@@ -51,7 +52,7 @@ export default async function PlayGame({ params }: { params: Promise<{ id: strin
         meta={`updated ${game.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
         html={game.html}
         countPlay={game.id}
-        notice={game.visibility !== "public" ? <p className="muted small">Private: only you can see this. Make it public from the studio to share it.</p> : null}
+        notice={game.visibility !== "public" ? <p className="muted small">Private: only you can see this. Publish it from the studio to share it.</p> : mine ? null : <ReportButton gameId={game.id} />}
         actions={
           <>
             {mine ? <Link className="btn big" href={`/studio/${game.id}`}>Edit with Frankie</Link> : <RemixButton remix={game.id} label="Remix" big />}
