@@ -12,7 +12,7 @@ export default async function StudioGame({ params }: { params: Promise<{ id: str
   const user = await currentUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(`/studio/${id}`)}`);
   const game = await findGame(id);
-  if (!game || game.ownerId !== user.id) notFound();
+  if (!game || (game.ownerId !== user.id && !user.admin)) notFound();
 
   const publishableKey = process.env.NEXT_PUBLIC_FRANKIE_PUBLISHABLE_KEY;
   return (

@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PlayGame({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [game, user] = await Promise.all([findGame(id), currentUser().catch(() => null)]);
-  if (!game || (game.visibility !== "public" && game.ownerId !== user?.id)) notFound();
+  if (!game || (game.visibility !== "public" && game.ownerId !== user?.id && !user?.admin)) notFound();
   const mine = game.ownerId === user?.id;
   const by = await ownerName(game);
   const ld = game.visibility === "public" ? {

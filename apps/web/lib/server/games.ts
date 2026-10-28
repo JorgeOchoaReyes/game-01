@@ -67,14 +67,15 @@ export async function findGame(id: string): Promise<Game | null> {
 // Owners see everything; anyone may read a public game.
 export async function getReadableGame(id: string, viewer: User | null): Promise<Game> {
   const game = await findGame(id);
-  if (!game || (game.visibility !== "public" && game.ownerId !== viewer?.id)) throw notFound("No such game.");
+  if (!game || (game.visibility !== "public" && game.ownerId !== viewer?.id && !viewer?.admin)) throw notFound("No such game.");
   return game;
 }
 
 export async function getOwnedGame(id: string, owner: User): Promise<Game> {
   const game = await findGame(id);
-  // 404 rather than 403 so ids of other people's private games are not confirmed
-  if (!game || game.ownerId !== owner.id) throw notFound("No such game in your account.");
+  // 404 rather than 403 so ids of other people's private games are not confirmed.
+  // Admins may change anyone's game.
+  if (!game || (game.ownerId !== owner.id && !owner.admin)) throw notFound("No such game in your account.");
   return game;
 }
 
@@ -133,7 +134,7 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
   // the transaction re-runs if the game changes underneath it, so two saves never share a version
   const saved = await firestore().runTransaction(async (tx) => {
     const current = toGame(await tx.get(ref));
-    if (!current || current.ownerId !== owner.id) throw notFound("No such game in your account.");
+    if (!current || (current.ownerId !== owner.id && !owner.admin)) throw notFound("No such game in your account.");
     if (input.baseVersion !== undefined && input.baseVersion !== current.version) {
       throw new HttpError(409, "version_conflict", `The game is at version ${current.version}, not ${String(input.baseVersion)}. Read it again and reapply your change.`);
     }

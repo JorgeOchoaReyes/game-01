@@ -34,7 +34,7 @@ export async function ensureUser(claims: DecodedIdToken, input: { name?: unknown
   return firestore().runTransaction(async (tx) => {
     const existing = toUser(await tx.get(ref));
     if (!existing) {
-      const user: User = { id: claims.uid, email, name, anonymous, tz, streak: null, createdAt: new Date() };
+      const user: User = { id: claims.uid, email, name, anonymous, tz, streak: null, createdAt: new Date(), admin: false };
       tx.set(ref, { email, name, anonymous, tz, createdAt: user.createdAt });
       return user;
     }

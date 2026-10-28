@@ -20,6 +20,8 @@ export type User = {
   tz: string | null;
   streak: Streak | null;
   createdAt: Date;
+  // the Firebase custom claim `admin: true` (scripts/set-admin.mjs); never stored here
+  admin: boolean;
 };
 
 export type Game = {
@@ -65,6 +67,7 @@ export function toUser(snap: DocumentSnapshot): User | null {
     tz: d.tz ?? null,
     streak: d.streak ?? null,
     createdAt: date(d.createdAt),
+    admin: false,
   };
 }
 

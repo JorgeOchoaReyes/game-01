@@ -17,6 +17,10 @@ import { streakStatus } from "./streaks";
 //            Minted by POST /api/frankie/token for the Frankie SDK. Frankie
 //            forwards it back on every tool call, so the API accepts it too and
 //            Frankie acts exactly as the signed-in user.
+//
+// Admins carry the Firebase custom claim `admin: true` (scripts/set-admin.mjs;
+// it reaches the session cookie at the next sign-in). The Frankie token repeats
+// it, since Frankie's calls carry no Firebase claims.
 
 export const SESSION_COOKIE = "polly_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14; // Firebase's maximum
@@ -32,10 +36,10 @@ function frankieSecret(): Uint8Array | null {
 // ---- tokens ------------------------------------------------------------------
 
 // The token the Frankie SDK exchanges for a Frankie session (see Frankie's docs/auth.md).
-export async function signFrankieToken(user: Pick<User, "id" | "name" | "email">): Promise<string> {
+export async function signFrankieToken(user: Pick<User, "id" | "name" | "email" | "admin">): Promise<string> {
   const key = frankieSecret();
   if (!key) throw new AuthConfigError("FRANKIE_JWT_SECRET is not set on the server.");
-  return new SignJWT({ name: user.name, ...(user.email ? { email: user.email } : {}) })
+  return new SignJWT({ name: user.name, ...(user.email ? { email: user.email } : {}), ...(user.admin ? { admin: true } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuer("polly")
@@ -52,7 +56,7 @@ export async function createSession(idToken: string): Promise<{ cookie: string; 
   return { cookie, claims };
 }
 
-export type Identity = { uid: string; claims?: DecodedIdToken };
+export type Identity = { uid: string; admin: boolean; claims?: DecodedIdToken };
 
 // Who a token speaks for, or null if it is not one we accept.
 export async function verifyToken(token: string): Promise<Identity | null> {
@@ -67,14 +71,14 @@ export async function verifyToken(token: string): Promise<Identity | null> {
       const key = frankieSecret();
       if (!key) return null;
       const { payload } = await jwtVerify(token, key, { issuer: "polly", audience: "frankie", algorithms: ["HS256"] });
-      return typeof payload.sub === "string" && payload.sub ? { uid: payload.sub } : null;
+      return typeof payload.sub === "string" && payload.sub ? { uid: payload.sub, admin: payload.admin === true } : null;
     }
     if (typeof iss === "string" && iss.startsWith("https://session.firebase.google.com/")) {
       const claims = await adminAuth().verifySessionCookie(token);
-      return { uid: claims.uid, claims };
+      return { uid: claims.uid, admin: claims.admin === true, claims };
     }
     const claims = await adminAuth().verifyIdToken(token);
-    return { uid: claims.uid, claims };
+    return { uid: claims.uid, admin: claims.admin === true, claims };
   } catch {
     return null;
   }
@@ -103,9 +107,8 @@ export async function userFromToken(token: string | null | undefined): Promise<U
   if (!token) return null;
   const who = await verifyToken(token);
   if (!who) return null;
-  const user = await getUser(who.uid);
-  if (user) return user;
-  return who.claims ? ensureUser(who.claims) : null;
+  const user = (await getUser(who.uid)) ?? (who.claims ? await ensureUser(who.claims) : null);
+  return user && { ...user, admin: who.admin };
 }
 
 export function getRequestUser(req: Request): Promise<User | null> {

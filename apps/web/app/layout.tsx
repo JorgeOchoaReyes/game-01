@@ -38,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/">Home</Link>
             <Link href="/games">Discover</Link>
             <Link href="/pricing">Pricing</Link>
+            {user?.admin && <Link href="/admin">Admin</Link>}
             <Link href="/studio" className="btn primary small"><Icon name="plus" /> Create</Link>
           </nav>
           <form className="search" action="/games" role="search">

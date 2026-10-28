@@ -19,6 +19,8 @@ export const FREE_GAMES = 1;
 export const PRO_PRICE_LABEL = "$10/month";
 
 export type Billing = {
+  // Pro given by an admin, with no subscription behind it
+  comp?: boolean;
   customerId: string;
   subscriptionId: string | null;
   status: Stripe.Subscription.Status | null;
@@ -37,7 +39,7 @@ export function stripe(): Stripe {
 export const billingEnabled = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_PRICE_ID;
 
 const ACTIVE: ReadonlySet<string> = new Set(["active", "trialing", "past_due"]);
-export const isPro = (b: Billing | null | undefined) => !!b?.status && ACTIVE.has(b.status);
+export const isPro = (b: Billing | null | undefined) => !!b?.comp || (!!b?.status && ACTIVE.has(b.status));
 
 export async function getBilling(uid: string): Promise<Billing | null> {
   const d = (await usersCol().doc(uid).get()).get("billing");
@@ -54,13 +56,13 @@ export async function planFor(user: User): Promise<Plan> {
     gamesCol().where("ownerId", "==", user.id).count().get().then((s) => s.data().count),
   ]);
   const enabled = billingEnabled();
-  const pro = isPro(billing);
+  const pro = user.admin || isPro(billing);
   return { pro, enabled, used, limit: enabled && !pro ? FREE_GAMES : null, billing };
 }
 
 // Called before every new game or video (starter, remix, Frankie's createGame).
 export async function assertCanCreate(user: User): Promise<void> {
-  if (!billingEnabled()) return;
+  if (!billingEnabled() || user.admin) return;
   const plan = await planFor(user);
   if (plan.limit !== null && plan.used >= plan.limit) {
     throw new HttpError(402, "payment_required",

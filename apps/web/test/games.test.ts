@@ -44,4 +44,15 @@ describe("games", () => {
     expect(await status(updateGame(g.id, other, { title: "still no" }))).toBe(404);
     expect((await listPublicGames()).find((p) => p.id === g.id)?.ownerName).toBe("Player");
   });
+
+  it("lets an admin open and change anyone's game, and nobody else", async () => {
+    const owner = await account("Owner");
+    const stranger = await account("Stranger");
+    const admin = { ...(await account("Admin")), admin: true };
+    const g = await createGame(owner, { html: html("Mine") });
+    expect(await status(getOwnedGame(g.id, stranger))).toBe(404);
+    expect(await status(getReadableGame(g.id, stranger))).toBe(404);
+    expect((await getReadableGame(g.id, admin)).title).toBe("Mine");
+    expect((await updateGame(g.id, admin, { title: "Fixed by admin" })).title).toBe("Fixed by admin");
+  });
 });
