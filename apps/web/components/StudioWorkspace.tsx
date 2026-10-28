@@ -87,9 +87,17 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
     return () => clearTimeout(t);
   }, [savedNote]);
 
+  // publishing can be refused by the community rules; say why
+  const [publishError, setPublishError] = useState<string | null>(null);
   const save = async (patch: Partial<Pick<StudioGame, "visibility" | "title">>) => {
+    setPublishError(null);
     const res = await fetch(`/api/v1/games/${game.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
-    if (res.ok) await refresh(false);
+    if (res.ok) {
+      await refresh(false);
+      if (patch.visibility === "public") setSavedNote("Published: anyone with the link can play");
+    } else {
+      setPublishError((await res.json().catch(() => null))?.error?.message ?? "Couldn't change that. Try again.");
+    }
   };
 
   // films change shape by rewriting CFG.format, saved as a new version
@@ -200,12 +208,25 @@ export function StudioWorkspace({ initial, frankie }: { initial: StudioGame; fra
         )}
         <button className="btn small" onClick={() => { setGameError(null); setRunKey((k) => k + 1); }}><Icon name="restart" /> Restart</button>
         {!film && <button className="btn small" onClick={() => setFull((f) => !f)}><Icon name={full ? "phone" : "monitor"} /> {full ? "Phone size" : "Wide"}</button>}
-        <button className="btn small" onClick={() => save({ visibility: game.visibility === "public" ? "private" : "public" })}>
-          <Icon name={game.visibility === "public" ? "globe" : "lock"} /> {game.visibility === "public" ? "Public" : "Private"}
-        </button>
+        {game.visibility === "public" ? (
+          <button className="btn small" onClick={() => save({ visibility: "private" })} title="Public: on Discover and playable by anyone with the link. Click to make it private.">
+            <Icon name="globe" /> Public
+          </button>
+        ) : (
+          <button className="btn small primary" onClick={() => save({ visibility: "public" })} title="Put it on Discover and give it a link anyone can play">
+            <Icon name="globe" /> Publish
+          </button>
+        )}
         {game.visibility === "public" && <a className="btn small" href={`/g/${game.id}`} target="_blank" rel="noreferrer">Play page <Icon name="external" size={14} /></a>}
         <a className="btn small primary" href={`/api/v1/games/${game.id}/download`}><Icon name="download" /> Download</a>
       </div>
+      {publishError && (
+        <div className="errbar">
+          <span>{publishError}</span>
+          <a className="btn small" href="/rules" target="_blank" rel="noreferrer">Rules</a>
+          <button className="btn small" onClick={() => setPublishError(null)}>OK</button>
+        </div>
+      )}
       {voiceError && voiceState === "off" && (
         <div className="errbar">
           <span>{voiceError}</span>

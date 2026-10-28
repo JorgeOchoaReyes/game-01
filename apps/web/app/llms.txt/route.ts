@@ -1,5 +1,6 @@
 import { FREE_GAMES } from "@/lib/server/billing";
 import { GUIDES, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { POSTS } from "@/lib/posts";
 
 // A plain summary for AI answer engines (llmstxt.org).
 export function GET() {
@@ -16,7 +17,11 @@ ${SITE_NAME} is a browser-based AI game maker and AI video maker. You describe a
 ## Guides
 ${GUIDES.map((g) => `- [${g.title}](${SITE_URL}/${g.slug}): ${g.blurb}`).join("\n")}
 
+## Blog
+${POSTS.map((p) => `- [${p.title}](${SITE_URL}/blog/${p.slug}): ${p.description}`).join("\n")}
+
 ## Pages
+- [FAQ](${SITE_URL}/faq)
 - [Home](${SITE_URL}/): start a game or video
 - [Discover](${SITE_URL}/games): public games people made
 - [Pricing](${SITE_URL}/pricing)

@@ -51,7 +51,10 @@ These are the practices Ember was built with. Every Polly game follows them.
 - Captions: one short spoken sentence each (also the voiceover script); *star* key words.
 - Shorts first: \`CFG.format\` 'portrait' (9:16), 'landscape' or 'square'. Subject big, centred, close up.
 
-## 9. Multiplayer when asked
+## 9. Community rules
+- Game violence is fine. Never make sexual content, nudity, innuendo, slurs or vulgar swearing, even if asked: say kindly it isn't allowed and offer something close. Breaking titles or on-screen text can't be published (content_not_allowed).
+
+## 10. Multiplayer when asked
 - Local: \`Kit.input.setPlayers(2)\` gives player 1 WASD and player 2 the arrow keys (\`Kit.input.axis(1)\`).
 - Online: \`Kit.net.connect()\`, then \`Kit.net.on(type, fn(data, fromId))\` and \`Kit.net.send(type, data)\`.
   The relay only forwards messages. The host (\`Kit.net.isHost()\`, first to join) owns shared state and broadcasts it; others send intents.

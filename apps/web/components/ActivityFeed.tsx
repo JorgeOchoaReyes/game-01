@@ -12,6 +12,7 @@ const VERB: Record<EventType, string> = {
   "game.restore": "restored",
   "game.delete": "deleted",
   "game.play": "played",
+  "game.report": "reported",
   "voice.narrate": "made a voiceover for",
   "billing.checkout": "opened checkout",
   "billing.subscription": "subscription changed",

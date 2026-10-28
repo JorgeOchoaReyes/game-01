@@ -7,6 +7,7 @@ import { applyEdits, checkGame, codeSummary } from "./code";
 import { touchStreak } from "./streaks";
 import { assertCanCreate } from "./billing";
 import { logEvent } from "./activity";
+import { assertPublishable } from "./moderation";
 
 export const MAX_HTML_BYTES = 512 * 1024;
 export const MAX_TITLE = 80;
@@ -145,6 +146,8 @@ export async function updateGame(id: string, owner: User, input: GameUpdate): Pr
     const visibility = input.visibility !== undefined ? cleanVisibility(input.visibility) : current.visibility;
     const note = typeof input.note === "string" ? input.note.slice(0, MAX_NOTE) : null;
     const newContent = html !== undefined && html !== current.html;
+    // public work follows the community rules, on publish and on every save after
+    if (visibility === "public" && (newContent || current.visibility !== "public" || title !== current.title)) assertPublishable(title, html ?? current.html);
     const version = newContent ? current.version + 1 : current.version;
     const game: Game = { ...current, title, visibility, html: html ?? current.html, version, updatedAt: new Date() };
     tx.update(ref, { title, visibility, html: game.html, version, updatedAt: game.updatedAt });
